@@ -105,7 +105,6 @@ fn verify_transaction_mode(session: &mut pop3_server_lib::POP3ServerSession) {
 
 #[test]
 fn can_login_with_valid_credentials() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -128,7 +127,6 @@ fn verify_not_in_transaction_mode(session: &mut pop3_server_lib::POP3ServerSessi
 
 #[test]
 fn cant_login_with_invalid_username() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -150,7 +148,6 @@ fn cant_login_with_invalid_username() {
 
 #[test]
 fn cant_login_with_invalid_password() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -181,7 +178,6 @@ fn cant_login_with_invalid_password() {
 
 #[test]
 fn can_stat_in_transaction_mode() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -200,7 +196,6 @@ fn can_stat_in_transaction_mode() {
 
 #[test]
 fn cant_stat_in_authorization_mode() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
     
@@ -219,7 +214,6 @@ fn cant_stat_in_authorization_mode() {
 
 #[test]
 fn cant_list_in_authorization_mode_without_arugments() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -237,7 +231,6 @@ fn cant_list_in_authorization_mode_without_arugments() {
 
 #[test]
 fn cant_list_in_authorization_mode_with_arguments() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -255,7 +248,6 @@ fn cant_list_in_authorization_mode_with_arguments() {
 
 #[test]
 fn can_list_in_transaction_mode_without_argument() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -274,7 +266,6 @@ fn can_list_in_transaction_mode_without_argument() {
 
 #[test]
 fn can_list_in_transaction_mode_with_argument() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -293,7 +284,6 @@ fn can_list_in_transaction_mode_with_argument() {
 
 #[test]
 fn cant_call_noop_in_authentication_mode() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -303,7 +293,6 @@ fn cant_call_noop_in_authentication_mode() {
 
 #[test]
 fn can_call_noop_in_transaction_mode() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -315,7 +304,6 @@ fn can_call_noop_in_transaction_mode() {
 
 #[test]
 fn cant_call_retr_in_authentication_mode() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -332,7 +320,6 @@ fn cant_call_retr_in_authentication_mode() {
 
 #[test]
 fn can_call_retr_in_transaction_mode() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -351,7 +338,6 @@ fn can_call_retr_in_transaction_mode() {
 
 #[test]
 fn cant_call_dele_in_authentication_mode() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -382,7 +368,6 @@ fn delete_message(
 
 #[test]
 fn can_call_dele_in_transaction_mode() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -396,7 +381,6 @@ fn can_call_dele_in_transaction_mode() {
 
 #[test]
 fn cant_delete_a_deleted_message() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -416,7 +400,6 @@ fn cant_delete_a_deleted_message() {
 
 #[test]
 fn cant_read_a_deleted_message() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -436,7 +419,6 @@ fn cant_read_a_deleted_message() {
 
 #[test]
 fn deleted_messages_are_no_longer_included_in_stat_total() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -467,7 +449,6 @@ fn deleted_messages_are_no_longer_included_in_stat_total() {
 
 #[test]
 fn cant_list_deleted_messages() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -498,7 +479,6 @@ fn cant_list_deleted_messages() {
 
 #[test]
 fn deleted_messages_are_no_longer_included_in_list() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -528,7 +508,6 @@ fn deleted_messages_are_no_longer_included_in_list() {
 
 #[test]
 fn cant_rset_in_authorization_mode() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -557,7 +536,6 @@ fn call_rset(session: &mut pop3_server_lib::POP3ServerSession) {
 
 #[test]
 fn can_rset_in_transaction_mode() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -569,7 +547,6 @@ fn can_rset_in_transaction_mode() {
 // More RSET tests
 #[test]
 fn can_read_previously_delted_message_after_rset() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -626,7 +603,6 @@ fn quit_session(session: &mut pop3_server_lib::POP3ServerSession) {
 
 #[test]
 fn can_quit_in_authorization_mode() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -636,7 +612,6 @@ fn can_quit_in_authorization_mode() {
 
 #[test]
 fn can_quit_in_transaction_mode() {
-    // Create session
     let server = construct_pop3_server();
     let mut session = server.new_session();
 
@@ -645,8 +620,12 @@ fn can_quit_in_transaction_mode() {
     quit_session(&mut session);
 }
 
-// I just want to test that after calling quit every command results
-// in no data being buffered for reading
+#[test]
+fn all_commands_are_ignored_after_quit() {
+    // I just want to test that after calling quit every command results
+    // in no data being buffered for reading
+}
+
 
 // Multi session tests
 
