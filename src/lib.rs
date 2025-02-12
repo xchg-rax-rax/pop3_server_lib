@@ -1,6 +1,11 @@
+//TODO: Add structured support for headers
+//TODO: Add structured support for lines
 //TODO: byte stuffing
-//TODO: make message numbers start from 1
 //TODO: implement remaining optional commands
+//TODO: General Tidying
+//TODO: Do tagged releases
+//TODO: Add docs
+//TODO: Make sure byte totals are correct 
 
 #[derive(PartialEq)]
 enum POP3ServerSessionStates {
@@ -12,14 +17,30 @@ enum POP3ServerSessionStates {
 }
 
 pub struct POP3Server {
-    pub locked_users: std::collections::HashSet<String>,
-    pub validate_username_callback: fn(&String) -> bool,
-    pub validate_password_callback: fn(&String, &String) -> bool,
-    pub retrive_maildrop_callback: fn(&String) -> Vec<String>,
-    pub delete_message_callback: fn(&String, usize) -> bool,
+    locked_users: std::collections::HashSet<String>,
+    validate_username_callback: fn(&String) -> bool,
+    validate_password_callback: fn(&String, &String) -> bool,
+    retrive_maildrop_callback: fn(&String) -> Vec<String>,
+    delete_message_callback: fn(&String, usize) -> bool,
 }
 
 impl POP3Server {
+    pub fn new(
+        validate_username_callback: fn(&String) -> bool,
+        validate_password_callback: fn(&String, &String) -> bool,
+        retrive_maildrop_callback: fn(&String) -> Vec<String>,
+        delete_message_callback: fn(&String, usize) -> bool,
+    ) -> Self {
+        let pop3_server: POP3Server = POP3Server{
+            locked_users: std::collections::HashSet::new(),
+            validate_username_callback,
+            validate_password_callback,
+            retrive_maildrop_callback,
+            delete_message_callback,
+        };
+        return pop3_server
+    }
+
     pub fn new_session (&mut self) -> POP3ServerSession {
         return POP3ServerSession::new(self)
     }
@@ -45,6 +66,12 @@ struct Message {
     body: String,
     deleted: bool,
 }
+
+struct Command {
+    keyword: String,
+    arguments: Vec<String>
+}
+
 
 pub struct POP3ServerSession<'a> {
     server: &'a mut POP3Server, // Sever that created the session
@@ -200,7 +227,7 @@ impl<'a> POP3ServerSession<'a> {
     }
 
     fn list_single_message(&mut self, message_number: usize) {
-        let message: Option<&Message> = self.maildrop.get(message_number);
+        let message: Option<&Message> = self.maildrop.get(message_number - 1);
         match message {
             Some(message) => {
                 if message.deleted {
@@ -229,10 +256,14 @@ impl<'a> POP3ServerSession<'a> {
     fn list_all_messages(&mut self) {
         self.output_buffer.extend(b"+OK scan listing follows\r\n");
         for (message_number, message) in self.maildrop.iter().enumerate() {
+            if message.deleted {
+                // Deleted messages should not be show by the LIST command
+                continue;
+            }
             self.output_buffer.extend(
                 format!(
                     "{} {}\r\n",
-                    message_number,
+                    message_number + 1,
                     message.body.len(), // will probably need to review this
                 ).as_bytes(),
             );
@@ -247,7 +278,7 @@ impl<'a> POP3ServerSession<'a> {
             self.output_buffer.extend(b"-ERR not authorized\r\n");
             return;
         }
-        let message: Option<&Message> = self.maildrop.get(message_number);
+        let message: Option<&Message> = self.maildrop.get(message_number - 1);
         match message {
             Some(message) => {
                 if message.deleted {
@@ -272,7 +303,7 @@ impl<'a> POP3ServerSession<'a> {
             self.output_buffer.extend(b"-ERR not authorized\r\n");
             return;
         }
-        let message: Option<&mut Message> = self.maildrop.get_mut(message_number);
+        let message: Option<&mut Message> = self.maildrop.get_mut(message_number - 1);
         match message {
             Some(message) => {
                 if message.deleted {
@@ -566,11 +597,6 @@ impl<'a> POP3ServerSession<'a> {
         }
     }
 
-}
-
-struct Command {
-    keyword: String,
-    arguments: Vec<String>
 }
 
 impl<'a> std::io::Read for POP3ServerSession<'a> {

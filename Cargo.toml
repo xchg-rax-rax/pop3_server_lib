@@ -1,5 +1,5 @@
 [package]
-name = "POP3_server"
+name = "pop3_server_lib"
 version = "0.1.0"
 edition = "2021"
 

@@ -1,4 +1,4 @@
-use POP3_server;
+use pop3_server_lib;
 use std::io::Read;
 use std::io::Write;
 
@@ -27,17 +27,17 @@ fn dummy_delete_message_callback(_username: &String, _message_number: usize) -> 
 }
 
 
-fn construct_pop3_server() -> POP3_server::POP3Server {
-    return POP3_server::POP3Server{
-        locked_users: std::collections::HashSet::new(),
-        validate_username_callback: |username| dummy_validate_username_callback(username),
-        validate_password_callback: |username, password| dummy_validate_password_callback(username, password),
-        retrive_maildrop_callback: |username| dummy_retrive_maildrop_callback(username),
-        delete_message_callback: |username, message_number| dummy_delete_message_callback(username, message_number),
-    };
+fn construct_pop3_server() -> pop3_server_lib::POP3Server {
+    let pop3_server: pop3_server_lib::POP3Server =  pop3_server_lib::POP3Server::new(
+         |username| dummy_validate_username_callback(username),
+         |username, password| dummy_validate_password_callback(username, password),
+        |username| dummy_retrive_maildrop_callback(username),
+        |username, message_number| dummy_delete_message_callback(username, message_number),
+    );
+    return pop3_server;
 }
 
-fn read_greeting(session: &mut POP3_server::POP3ServerSession) {
+fn read_greeting(session: &mut pop3_server_lib::POP3ServerSession) {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
@@ -53,7 +53,7 @@ fn server_sends_greeting() {
     read_greeting(&mut session);
 }
 
-fn login_with_valid_credentials(session: &mut POP3_server::POP3ServerSession) {
+fn login_with_valid_credentials(session: &mut pop3_server_lib::POP3ServerSession) {
     // Send USER command
     let user_command = "USER admin\r\n";
     session.write(user_command.as_bytes()).unwrap();
@@ -73,7 +73,7 @@ fn login_with_valid_credentials(session: &mut POP3_server::POP3ServerSession) {
     assert_eq!(response.len(), bytes_read);
 }
 
-fn verify_transaction_mode(session: &mut POP3_server::POP3ServerSession) {
+fn verify_transaction_mode(session: &mut pop3_server_lib::POP3ServerSession) {
     let noop_command = "NOOP\r\n";
     session.write(noop_command.as_bytes()).unwrap();
     let mut buf: [u8; 512] = [0; 512];
@@ -95,7 +95,7 @@ fn can_login_with_valid_credentials() {
 }
 
 
-fn verify_not_in_transaction_mode(session: &mut POP3_server::POP3ServerSession) {
+fn verify_not_in_transaction_mode(session: &mut pop3_server_lib::POP3ServerSession) {
     let noop_command = "NOOP\r\n";
     session.write(noop_command.as_bytes()).unwrap();
     let mut buf: [u8; 512] = [0; 512];
@@ -248,7 +248,7 @@ fn can_list_in_transaction_mode_without_argument() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK scan listing follows\r\n0 10\r\n1 30\r\n2 12\r\n3 11\r\n4 11\r\n.\r\n");
+    assert_eq!(response, "+OK scan listing follows\r\n1 10\r\n2 30\r\n3 12\r\n4 11\r\n5 11\r\n.\r\n");
     assert_eq!(response.len(), bytes_read);
 }
 
@@ -262,12 +262,12 @@ fn can_list_in_transaction_mode_with_argument() {
     login_with_valid_credentials(&mut session);
 
     // Send LIST command with argument
-    let list_command = "LIST 2\r\n";
+    let list_command = "LIST 3\r\n";
     session.write(list_command.as_bytes()).unwrap();
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK 2 12\r\n");
+    assert_eq!(response, "+OK 3 12\r\n");
     assert_eq!(response.len(), bytes_read);
 }
 
@@ -320,7 +320,7 @@ fn can_call_retr_in_transaction_mode() {
     login_with_valid_credentials(&mut session);
 
     // Send RETR command
-    let retr_command = "RETR 1\r\n";
+    let retr_command = "RETR 2\r\n";
     session.write(retr_command.as_bytes()).unwrap();
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
@@ -346,17 +346,12 @@ fn cant_call_dele_in_authentication_mode() {
     assert_eq!(response.len(), bytes_read);
 }
 
-#[test]
-fn can_call_dele_in_transaction_mode() {
-    // Create session
-    let mut server = construct_pop3_server();
-    let mut session = server.new_session();
-
-    read_greeting(&mut session);
-    login_with_valid_credentials(&mut session);
-
+fn delete_message(
+    session: &mut pop3_server_lib::POP3ServerSession,
+    message_number: usize,
+) {
     // Send DELE command
-    let dele_command = "DELE 1\r\n";
+    let dele_command = format!("DELE {}\r\n", message_number);
     session.write(dele_command.as_bytes()).unwrap();
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
@@ -365,5 +360,237 @@ fn can_call_dele_in_transaction_mode() {
     assert_eq!(response.len(), bytes_read);
 }
 
+#[test]
+fn can_call_dele_in_transaction_mode() {
+    // Create session
+    let mut server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    delete_message(&mut session, 1);
+}
+
 // Deleting a message changes the output of various other commands
 // All of these commands must be tested in concert with DELE
+
+#[test]
+fn cant_delete_a_deleted_message() {
+    // Create session
+    let mut server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    delete_message(&mut session, 1);
+
+    // Send DELE command
+    let dele_command = "DELE 1\r\n";
+    session.write(dele_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR message already deleted\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_read_a_deleted_message() {
+    // Create session
+    let mut server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    delete_message(&mut session, 1);
+
+    // Send RETR command
+    let retr_command = "RETR 1\r\n";
+    session.write(retr_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR message has been deleted\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn deleted_messages_are_no_longer_included_in_stat_total() {
+    // Create session
+    let mut server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+
+    // Send STAT command before message is deleted
+    let stat_command = "STAT\r\n";
+    session.write(stat_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK 5 74\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+    delete_message(&mut session, 2);
+
+    // Send STAT command after message is deleted
+    let stat_command = "STAT\r\n";
+    session.write(stat_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK 4 44\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+
+#[test]
+fn cant_list_deleted_messages() {
+    // Create session
+    let mut server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+
+    // Send LIST command with argument before message is deleted
+    let list_command = "LIST 3\r\n";
+    session.write(list_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK 3 12\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+    delete_message(&mut session, 3);
+
+    // Send LIST command with argument after message is deleted
+    let list_command = "LIST 3\r\n";
+    session.write(list_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR message has been deleted\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+
+#[test]
+fn deleted_messages_are_no_longer_included_in_list() {
+    // Create session
+    let mut server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+
+    // Send LIST command without argument before message is deleted
+    let list_command = "LIST\r\n";
+    session.write(list_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK scan listing follows\r\n1 10\r\n2 30\r\n3 12\r\n4 11\r\n5 11\r\n.\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+    delete_message(&mut session, 2);
+
+    // Send LIST command without argument before message is deleted
+    let list_command = "LIST\r\n";
+    session.write(list_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK scan listing follows\r\n1 10\r\n3 12\r\n4 11\r\n5 11\r\n.\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_rset_in_authorization_mode() {
+    // Create session
+    let mut server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+
+    // Send RSET command
+    let rset_command = "RSET\r\n";
+    session.write(rset_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR not authorized\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+fn call_rset(session: &mut pop3_server_lib::POP3ServerSession) {
+    // Send RSET command
+    let rset_command = "RSET\r\n";
+    session.write(rset_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn can_rset_in_transaction_mode() {
+    // Create session
+    let mut server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    call_rset(&mut session);
+}
+
+// More RSET tests
+#[test]
+fn can_read_previously_delted_message_after_rset() {
+    // Create session
+    let mut server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+
+    // Send LIST command with argument before message is deleted
+    let list_command = "LIST 3\r\n";
+    session.write(list_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK 3 12\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+    delete_message(&mut session, 3);
+
+    // Send LIST command with argument after message is deleted
+    let list_command = "LIST 3\r\n";
+    session.write(list_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR message has been deleted\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+    call_rset(&mut session);
+
+    // Send LIST command with argument after message is deleted and RSET called
+    let list_command = "LIST 3\r\n";
+    session.write(list_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK 3 12\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+}
+
+// Could add more RSET tests
+
+// QUIT tests
+
+// Multi session tests
