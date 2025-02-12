@@ -5,21 +5,34 @@ use std::io::Write;
 // Define out dummy server implementation
 
 fn dummy_validate_username_callback(username: &String) -> bool {
-    return username == "admin";
+    return username == "admin" || username == "user";
 }
 
 fn dummy_validate_password_callback(username: &String, password: &String) -> bool {
-    return username == "admin" && password == "password";
+    return (username == "admin" && password == "password") ||
+           (username == "user" && password == "pass");
 }
 
-fn dummy_retrive_maildrop_callback(_username: &String) -> Vec<String> {
-    return vec![
-        "test one\r\n".to_string(),
-        "test two\r\nLets all love lain\r\n".to_string(),
-        "test three\r\n".to_string(),
-        "test four\r\n".to_string(),
-        "test five\r\n".to_string(),
-    ]
+fn dummy_retrive_maildrop_callback(username: &String) -> Vec<String> {
+    if username == "admin" {
+        return vec![
+            "test one\r\n".to_string(),
+            "test two\r\nLets all love lain\r\n".to_string(),
+            "test three\r\n".to_string(),
+            "test four\r\n".to_string(),
+            "test five\r\n".to_string(),
+        ]
+    }
+    else if username == "user" {
+        return vec![
+            "this is a test\r\n".to_string(),
+            "test this!\r\nLets all love lain\r\n".to_string(),
+        ]
+    }
+    else {
+        assert!(false);
+        return vec![];
+    }
 }
 
 fn dummy_delete_message_callback(_username: &String, _message_number: usize) -> bool {
@@ -28,13 +41,12 @@ fn dummy_delete_message_callback(_username: &String, _message_number: usize) -> 
 
 
 fn construct_pop3_server() -> pop3_server_lib::POP3Server {
-    let pop3_server: pop3_server_lib::POP3Server =  pop3_server_lib::POP3Server::new(
+    return pop3_server_lib::POP3Server::new(
          |username| dummy_validate_username_callback(username),
          |username, password| dummy_validate_password_callback(username, password),
         |username| dummy_retrive_maildrop_callback(username),
         |username, message_number| dummy_delete_message_callback(username, message_number),
     );
-    return pop3_server;
 }
 
 fn read_greeting(session: &mut pop3_server_lib::POP3ServerSession) {
@@ -48,14 +60,22 @@ fn read_greeting(session: &mut pop3_server_lib::POP3ServerSession) {
 
 #[test]
 fn server_sends_greeting() {
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
     read_greeting(&mut session);
 }
 
 fn login_with_valid_credentials(session: &mut pop3_server_lib::POP3ServerSession) {
+    login_with_credentials(session, "admin", "password");
+}
+
+fn login_with_credentials(
+    session: &mut pop3_server_lib::POP3ServerSession, 
+    username: &str,
+    password: &str,
+) {
     // Send USER command
-    let user_command = "USER admin\r\n";
+    let user_command = format!("USER {}\r\n", username);
     session.write(user_command.as_bytes()).unwrap();
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
@@ -64,7 +84,7 @@ fn login_with_valid_credentials(session: &mut pop3_server_lib::POP3ServerSession
     assert_eq!(response.len(), bytes_read);
 
     // Send password
-    let pass_command = "PASS password\r\n";
+    let pass_command = format!("PASS {}\r\n", password);
     session.write(pass_command.as_bytes()).unwrap();
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
@@ -86,7 +106,7 @@ fn verify_transaction_mode(session: &mut pop3_server_lib::POP3ServerSession) {
 #[test]
 fn can_login_with_valid_credentials() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -109,7 +129,7 @@ fn verify_not_in_transaction_mode(session: &mut pop3_server_lib::POP3ServerSessi
 #[test]
 fn cant_login_with_invalid_username() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     // Read greeting
@@ -131,7 +151,7 @@ fn cant_login_with_invalid_username() {
 #[test]
 fn cant_login_with_invalid_password() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     // Read greeting
@@ -162,7 +182,7 @@ fn cant_login_with_invalid_password() {
 #[test]
 fn can_stat_in_transaction_mode() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -181,7 +201,7 @@ fn can_stat_in_transaction_mode() {
 #[test]
 fn cant_stat_in_authorization_mode() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
     
     read_greeting(&mut session);
@@ -200,7 +220,7 @@ fn cant_stat_in_authorization_mode() {
 #[test]
 fn cant_list_in_authorization_mode_without_arugments() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -218,7 +238,7 @@ fn cant_list_in_authorization_mode_without_arugments() {
 #[test]
 fn cant_list_in_authorization_mode_with_arguments() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -236,7 +256,7 @@ fn cant_list_in_authorization_mode_with_arguments() {
 #[test]
 fn can_list_in_transaction_mode_without_argument() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -255,7 +275,7 @@ fn can_list_in_transaction_mode_without_argument() {
 #[test]
 fn can_list_in_transaction_mode_with_argument() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -274,7 +294,7 @@ fn can_list_in_transaction_mode_with_argument() {
 #[test]
 fn cant_call_noop_in_authentication_mode() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -284,7 +304,7 @@ fn cant_call_noop_in_authentication_mode() {
 #[test]
 fn can_call_noop_in_transaction_mode() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -296,7 +316,7 @@ fn can_call_noop_in_transaction_mode() {
 #[test]
 fn cant_call_retr_in_authentication_mode() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -313,7 +333,7 @@ fn cant_call_retr_in_authentication_mode() {
 #[test]
 fn can_call_retr_in_transaction_mode() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -332,7 +352,7 @@ fn can_call_retr_in_transaction_mode() {
 #[test]
 fn cant_call_dele_in_authentication_mode() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -363,7 +383,7 @@ fn delete_message(
 #[test]
 fn can_call_dele_in_transaction_mode() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -377,7 +397,7 @@ fn can_call_dele_in_transaction_mode() {
 #[test]
 fn cant_delete_a_deleted_message() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -397,7 +417,7 @@ fn cant_delete_a_deleted_message() {
 #[test]
 fn cant_read_a_deleted_message() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -417,7 +437,7 @@ fn cant_read_a_deleted_message() {
 #[test]
 fn deleted_messages_are_no_longer_included_in_stat_total() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -448,7 +468,7 @@ fn deleted_messages_are_no_longer_included_in_stat_total() {
 #[test]
 fn cant_list_deleted_messages() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -479,7 +499,7 @@ fn cant_list_deleted_messages() {
 #[test]
 fn deleted_messages_are_no_longer_included_in_list() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -509,7 +529,7 @@ fn deleted_messages_are_no_longer_included_in_list() {
 #[test]
 fn cant_rset_in_authorization_mode() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -538,7 +558,7 @@ fn call_rset(session: &mut pop3_server_lib::POP3ServerSession) {
 #[test]
 fn can_rset_in_transaction_mode() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -550,7 +570,7 @@ fn can_rset_in_transaction_mode() {
 #[test]
 fn can_read_previously_delted_message_after_rset() {
     // Create session
-    let mut server = construct_pop3_server();
+    let server = construct_pop3_server();
     let mut session = server.new_session();
 
     read_greeting(&mut session);
@@ -592,5 +612,35 @@ fn can_read_previously_delted_message_after_rset() {
 // Could add more RSET tests
 
 // QUIT tests
+// I just want to test that after calling quit every command results
+// in no data being buffered for reading
 
 // Multi session tests
+
+#[test]
+fn user_cant_be_logged_into_two_sessions() {
+    let server = construct_pop3_server();
+    let mut session1 = server.new_session();
+    let mut session2 = server.new_session();
+    
+    read_greeting(&mut session1);
+    login_with_credentials(
+        &mut session1,
+        "admin", 
+        "password",
+    );
+
+    read_greeting(&mut session2);
+    login_with_credentials(
+        &mut session2,
+        "user", 
+        "pass",
+    );
+}
+
+// - Test that we can start two sessions with the different users
+// - Test that we can start a session with one user, quit, and start a session with the same user
+// - Test that we can start two sessions with different messages and LIST differs
+
+
+

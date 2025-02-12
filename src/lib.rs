@@ -17,7 +17,7 @@ enum POP3ServerSessionStates {
 }
 
 pub struct POP3Server {
-    locked_users: std::collections::HashSet<String>,
+    locked_users: std::sync::RwLock<std::collections::HashSet<String>>,
     validate_username_callback: fn(&String) -> bool,
     validate_password_callback: fn(&String, &String) -> bool,
     retrive_maildrop_callback: fn(&String) -> Vec<String>,
@@ -32,7 +32,7 @@ impl POP3Server {
         delete_message_callback: fn(&String, usize) -> bool,
     ) -> Self {
         let pop3_server: POP3Server = POP3Server{
-            locked_users: std::collections::HashSet::new(),
+            locked_users: std::sync::RwLock::new(std::collections::HashSet::new()),
             validate_username_callback,
             validate_password_callback,
             retrive_maildrop_callback,
@@ -41,8 +41,18 @@ impl POP3Server {
         return pop3_server
     }
 
-    pub fn new_session (&mut self) -> POP3ServerSession {
+    pub fn new_session (&self) -> POP3ServerSession {
         return POP3ServerSession::new(self)
+    }
+
+    pub fn lock_user(&self, username: &String) {
+        let mut locked_users = self.locked_users.write().unwrap();
+        locked_users.insert(username.clone());
+    }
+
+    pub fn unlock_user(&self, username: &String) {
+        let mut locked_users = self.locked_users.write().unwrap();
+        locked_users.remove(username);
     }
 
     fn retrive_raw_maildrop(&self, username: &String) -> Vec<String> {
@@ -74,7 +84,7 @@ struct Command {
 
 
 pub struct POP3ServerSession<'a> {
-    server: &'a mut POP3Server, // Sever that created the session
+    server: &'a POP3Server, // Sever that created the session
     state: POP3ServerSessionStates,
     username: String,
     input_buffer: Vec<u8>,
@@ -83,7 +93,7 @@ pub struct POP3ServerSession<'a> {
 }
 
 impl<'a> POP3ServerSession<'a> {
-    fn new(server: &'a mut POP3Server) -> Self {
+    fn new(server: &'a POP3Server) -> Self {
         let mut instance: Self = POP3ServerSession{
             server: server,
             state: POP3ServerSessionStates::AuthorizationUser,
@@ -137,8 +147,9 @@ impl<'a> POP3ServerSession<'a> {
             return;
         }
 
-        // Obtain lock
-        self.server.locked_users.insert(self.username.clone());
+        // Obtain lock for user
+        self.server.lock_user(&self.username);
+
         self.maildrop = POP3ServerSession::format_maildrop(
             &self.server.retrive_raw_maildrop(
                 &self.username,
@@ -363,7 +374,8 @@ impl<'a> POP3ServerSession<'a> {
                     }
                 }
             }
-            // TODO: Release any resources here (eg. lock)
+            // Release lock for user
+            self.server.unlock_user(&self.username);
         }
 
         if update_succesful {
