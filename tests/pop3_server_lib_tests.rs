@@ -704,7 +704,41 @@ fn user_can_login_quit_and_login_to_a_new_session() {
         "password",
     );
 }
-// - Test that we can start two sessions with different messages and LIST differs
+
+#[test]
+fn different_users_have_different_maildrops_with_simulatenous_sessions() {
+    let server = construct_pop3_server();
+
+    let mut session1 = server.new_session();
+    read_greeting(&mut session1);
+    login_with_credentials(
+        &mut session1,
+        "admin", 
+        "password",
+    );
+    let list_command = "LIST\r\n";
+    session1.write(list_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session1.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK scan listing follows\r\n1 10\r\n2 30\r\n3 12\r\n4 11\r\n5 11\r\n.\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+    let mut session2 = server.new_session();
+    read_greeting(&mut session2);
+    login_with_credentials(
+        &mut session2,
+        "user", 
+        "pass",
+    );
+    let list_command = "LIST\r\n";
+    session2.write(list_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session2.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK scan listing follows\r\n1 16\r\n2 32\r\n.\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
 
 
 
