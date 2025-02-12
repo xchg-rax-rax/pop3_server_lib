@@ -55,6 +55,11 @@ impl POP3Server {
         locked_users.remove(username);
     }
 
+    pub fn check_user_lock(&self, username: &String) -> bool {
+        let locked_users = self.locked_users.read().unwrap();
+        return locked_users.contains(username);
+    }
+
     fn retrive_raw_maildrop(&self, username: &String) -> Vec<String> {
         return (self.retrive_maildrop_callback)(username);
     }
@@ -102,8 +107,7 @@ impl<'a> POP3ServerSession<'a> {
             output_buffer: Vec::new(),
             maildrop: Vec::new(),
         };
-        instance.send_greeting();
-        return instance;
+        instance.send_greeting(); return instance;
     }
 
     // Send greeting to client after connection completed
@@ -134,7 +138,11 @@ impl<'a> POP3ServerSession<'a> {
 
     fn pass(&mut self, password: &String) {
         if self.state != POP3ServerSessionStates::AuthorizationPass {
-            self.output_buffer.extend(b"-ERR\r\n"); // Think of better error
+            self.output_buffer.extend(b"-ERR\r\n"); // TODO:  Think of better error
+            return;
+        }
+        if self.server.check_user_lock(&self.username) {
+            self.output_buffer.extend(b"-ERR maildrop already locked\r\n");
             return;
         }
         let is_password_valid = self.server.validate_password(
@@ -360,7 +368,7 @@ impl<'a> POP3ServerSession<'a> {
     // QUIT command
     fn quit(&mut self) {
         let mut update_succesful: bool = true;
-        if self.state != POP3ServerSessionStates::Transaction {
+        if self.state == POP3ServerSessionStates::Transaction {
             self.state = POP3ServerSessionStates::Update;
             // Delete any messages marked for deletion
             for (message_number, message) in self.maildrop.iter().enumerate() {

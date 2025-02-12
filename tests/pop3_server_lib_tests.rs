@@ -612,13 +612,46 @@ fn can_read_previously_delted_message_after_rset() {
 // Could add more RSET tests
 
 // QUIT tests
+
+fn quit_session(session: &mut pop3_server_lib::POP3ServerSession) {
+    // Send USER command
+    let user_command = "QUIT\r\n";
+    session.write(user_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK POP3 server signing off\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn can_quit_in_authorization_mode() {
+    // Create session
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+}
+
+#[test]
+fn can_quit_in_transaction_mode() {
+    // Create session
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    quit_session(&mut session);
+}
+
 // I just want to test that after calling quit every command results
 // in no data being buffered for reading
 
 // Multi session tests
 
 #[test]
-fn user_cant_be_logged_into_two_sessions() {
+fn two_user_can_be_logged_into_two_sessions() {
     let server = construct_pop3_server();
     let mut session1 = server.new_session();
     let mut session2 = server.new_session();
@@ -638,8 +671,60 @@ fn user_cant_be_logged_into_two_sessions() {
     );
 }
 
-// - Test that we can start two sessions with the different users
-// - Test that we can start a session with one user, quit, and start a session with the same user
+#[test]
+fn user_cant_log_into_two_sessions() {
+    let server = construct_pop3_server();
+    let mut session1 = server.new_session();
+    let mut session2 = server.new_session();
+    
+    read_greeting(&mut session1);
+    login_with_credentials(
+        &mut session1,
+        "admin", 
+        "password",
+    );
+
+    read_greeting(&mut session2);
+    // Send USER command
+    let user_command = "USER admin\r\n";
+    session2.write(user_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session2.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK user found\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+    // Send password
+    let pass_command = "PASS password\r\n";
+    session2.write(pass_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session2.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR maildrop already locked\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn user_can_login_quit_and_login_to_a_new_session() {
+    let server = construct_pop3_server();
+
+    let mut session1 = server.new_session();
+    read_greeting(&mut session1);
+    login_with_credentials(
+        &mut session1,
+        "admin", 
+        "password",
+    );
+    quit_session(&mut session1);
+
+    let mut session2 = server.new_session();
+    read_greeting(&mut session2);
+    login_with_credentials(
+        &mut session2,
+        "admin", 
+        "password",
+    );
+}
 // - Test that we can start two sessions with different messages and LIST differs
 
 
