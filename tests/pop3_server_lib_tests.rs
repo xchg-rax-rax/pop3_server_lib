@@ -558,6 +558,36 @@ fn cant_list_deleted_messages() {
 
 
 #[test]
+fn cant_top_deleted_messages() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+
+    // Send TOP command before message is deleted
+    let top_command = "TOP 2 1\r\n";
+    session.write(top_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK message follows\r\nHeader2: value2\r\n\r\ntest two\r\n.\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+    delete_message(&mut session, 2);
+
+    // Send TOP command after message is deleted
+    let top_command = "TOP 2 1\r\n";
+    session.write(top_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR message has been deleted\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+
+#[test]
 fn deleted_messages_are_no_longer_included_in_list() {
     let server = construct_pop3_server();
     let mut session = server.new_session();
@@ -665,7 +695,8 @@ fn can_read_previously_delted_message_after_rset() {
     assert_eq!(response.len(), bytes_read);
 }
 
-// Could add more RSET tests
+
+// TODO: add more RSET tests
 
 // QUIT tests
 
@@ -703,6 +734,7 @@ fn can_quit_in_transaction_mode() {
 fn all_commands_are_ignored_after_quit() {
     // I just want to test that after calling quit every command results
     // in no data being buffered for reading
+    assert!(false);
 }
 
 
