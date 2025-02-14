@@ -1,5 +1,3 @@
-//TODO: Add structured support for headers
-//TODO: Add structured support for lines
 //TODO: byte stuffing
 //TODO: implement remaining optional commands
 //TODO: General Tidying
@@ -20,7 +18,7 @@ pub struct POP3Server {
     locked_users: std::sync::RwLock<std::collections::HashSet<String>>,
     validate_username_callback: fn(&String) -> bool,
     validate_password_callback: fn(&String, &String) -> bool,
-    retrive_maildrop_callback: fn(&String) -> Vec<String>,
+    retrive_maildrop_callback: fn(&String) -> Vec<Message>,
     delete_message_callback: fn(&String, usize) -> bool,
 }
 
@@ -28,7 +26,7 @@ impl POP3Server {
     pub fn new(
         validate_username_callback: fn(&String) -> bool,
         validate_password_callback: fn(&String, &String) -> bool,
-        retrive_maildrop_callback: fn(&String) -> Vec<String>,
+        retrive_maildrop_callback: fn(&String) -> Vec<Message>,
         delete_message_callback: fn(&String, usize) -> bool,
     ) -> Self {
         let pop3_server: POP3Server = POP3Server{
@@ -60,7 +58,7 @@ impl POP3Server {
         return locked_users.contains(username);
     }
 
-    fn retrive_raw_maildrop(&self, username: &String) -> Vec<String> {
+    fn retrive_maildrop(&self, username: &String) -> Vec<Message> {
         return (self.retrive_maildrop_callback)(username);
     }
 
@@ -77,15 +75,55 @@ impl POP3Server {
     }
 }
 
-struct Message {
-    body: String,
+pub struct Message {
+    headers: Vec<String>,
+    body: Vec<String>,
+    size: usize,
     deleted: bool,
+}
+
+impl Message {
+    pub fn new(
+        headers: &Vec<String>,
+        body: &Vec<String>,
+    ) -> Self {
+        // TODO: Account for byte stuffing
+        // TODO: Verify this calculation is correct see section 11 of RFC-1939
+        let mut total_size = 0;
+        for header in headers {
+            total_size += header.len() + 2;
+        }
+        // Add two bytes for blank line between header and body
+        total_size += 2;
+        for line in body {
+            total_size += line.len() + 2;
+        }
+        return Message {
+            headers: headers.clone(),
+            body: body.clone(),
+            size: total_size,
+            deleted: false,
+        }
+    }
+
+    pub fn get_message_bytes(&self) -> Vec<u8> {
+        let mut output = String::new();
+        for header in &self.headers {
+            output += header;
+            output += "\r\n";
+        }
+        output += "\r\n";
+        for line in &self.body {
+            output += line ;
+            output += "\r\n";
+        }
+        return output.into_bytes();
+    }
 }
 
 struct Command {
     keyword: String,
-    arguments: Vec<String>
-}
+    arguments: Vec<String> }
 
 
 pub struct POP3ServerSession<'a> {
@@ -158,16 +196,16 @@ impl<'a> POP3ServerSession<'a> {
         // Obtain lock for user
         self.server.lock_user(&self.username);
 
-        self.maildrop = POP3ServerSession::format_maildrop(
-            &self.server.retrive_raw_maildrop(
-                &self.username,
-            ),
+        self.maildrop = self.server.retrive_maildrop(
+            &self.username,
         );
         
         self.state = POP3ServerSessionStates::Transaction;
         self.output_buffer.extend(b"+OK logged in\r\n");
     }
 
+    // Will need this if we ever add raw Message parsing
+    /*
     fn format_maildrop(raw_maildrop: &Vec<String>) -> Vec<Message> {
         let mut formatted_maildrop: Vec<Message> = Vec::new();
         for raw_message in raw_maildrop {
@@ -180,6 +218,7 @@ impl<'a> POP3ServerSession<'a> {
         }
         return formatted_maildrop;
     }
+    */
 
     // -------------------------- //
     // Transaction State Commands //
@@ -223,8 +262,8 @@ impl<'a> POP3ServerSession<'a> {
             if message.deleted {
                 continue;
             }
-            // This may be incorrect
-            total_size += message.body.len()
+            // TODO: This may be incorrect
+            total_size += message.size;
         }
         return total_size;
     }
@@ -257,7 +296,7 @@ impl<'a> POP3ServerSession<'a> {
                     format!(
                         "+OK {} {}\r\n",
                         message_number,
-                        message.body.len(), // will probably need to review this
+                        message.size, // will probably need to review this
                     ).as_bytes(),
                 );
             }
@@ -283,7 +322,7 @@ impl<'a> POP3ServerSession<'a> {
                 format!(
                     "{} {}\r\n",
                     message_number + 1,
-                    message.body.len(), // will probably need to review this
+                    message.size, // will probably need to review this
                 ).as_bytes(),
             );
         }
@@ -306,7 +345,7 @@ impl<'a> POP3ServerSession<'a> {
                 }
                 self.output_buffer.extend(b"+OK message follows\r\n");
                 // Send message (should already be formatted and byte stuffed)
-                self.output_buffer.extend(message.body.as_bytes());
+                self.output_buffer.extend(message.get_message_bytes());
                 // Send termination character
                 self.output_buffer.extend(b".\r\n");
             }
@@ -358,7 +397,21 @@ impl<'a> POP3ServerSession<'a> {
         }
         self.output_buffer.extend(b"+OK\r\n");
     }
-   
+
+    // TOP
+    /*
+    fn top(
+        &mut self,
+        message_number: usize,
+        number_of_lines: usize,
+    ) {
+        if self.state != POP3ServerSessionStates::Transaction {
+            self.output_buffer.extend(b"-ERR not authorized\r\n");
+            return;
+        }
+        // TODO: Implement
+    }
+   */
 
     // --------------------- //
     // Update State Commands //
@@ -613,7 +666,7 @@ impl<'a> POP3ServerSession<'a> {
             .collect();
         return Command {
             keyword: String::from(keyword),
-            arguments: arguments 
+            arguments 
         }
     }
 

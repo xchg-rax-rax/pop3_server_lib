@@ -13,20 +13,47 @@ fn dummy_validate_password_callback(username: &String, password: &String) -> boo
            (username == "user" && password == "pass");
 }
 
-fn dummy_retrive_maildrop_callback(username: &String) -> Vec<String> {
+fn dummy_retrive_maildrop_callback(username: &String) -> Vec<pop3_server_lib::Message> {
     if username == "admin" {
         return vec![
-            "test one\r\n".to_string(),
-            "test two\r\nLets all love lain\r\n".to_string(),
-            "test three\r\n".to_string(),
-            "test four\r\n".to_string(),
-            "test five\r\n".to_string(),
+            pop3_server_lib::Message::new(
+                &vec!["Header1: value1".to_string()],
+                &vec!["test one".to_string()],
+            ),
+            pop3_server_lib::Message::new(
+                &vec!["Header2: value2".to_string()],
+                &vec![
+                    "test two".to_string(),
+                    "Lets all love lain".to_string(),
+                ],
+            ),
+            pop3_server_lib::Message::new(
+                &vec!["Header3: value3".to_string()],
+                &vec!["test three".to_string()],
+            ),
+            pop3_server_lib::Message::new(
+                &vec!["Header4: value4".to_string()],
+                &vec!["test four".to_string()],
+            ),
+            pop3_server_lib::Message::new(
+                &vec!["Header5: value5".to_string()],
+                &vec!["test five".to_string()],
+            ),
         ]
     }
     else if username == "user" {
         return vec![
-            "this is a test\r\n".to_string(),
-            "test this!\r\nLets all love lain\r\n".to_string(),
+            pop3_server_lib::Message::new(
+                &vec!["TestHeader: test_value".to_string()],
+                &vec!["this is a test".to_string()],
+            ),
+            pop3_server_lib::Message::new(
+                &vec!["LainHeader: 141N".to_string()],
+                &vec![
+                    "test this!".to_string(),
+                    "Lets all love lain".to_string(),
+                ],
+            ),
         ]
     }
     else {
@@ -190,7 +217,7 @@ fn can_stat_in_transaction_mode() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK 5 74\r\n");
+    assert_eq!(response, "+OK 5 169\r\n");
     assert_eq!(response.len(), bytes_read);
 }
 
@@ -260,7 +287,7 @@ fn can_list_in_transaction_mode_without_argument() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK scan listing follows\r\n1 10\r\n2 30\r\n3 12\r\n4 11\r\n5 11\r\n.\r\n");
+    assert_eq!(response, "+OK scan listing follows\r\n1 29\r\n2 49\r\n3 31\r\n4 30\r\n5 30\r\n.\r\n");
     assert_eq!(response.len(), bytes_read);
 }
 
@@ -278,7 +305,7 @@ fn can_list_in_transaction_mode_with_argument() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK 3 12\r\n");
+    assert_eq!(response, "+OK 3 31\r\n");
     assert_eq!(response.len(), bytes_read);
 }
 
@@ -332,7 +359,7 @@ fn can_call_retr_in_transaction_mode() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK message follows\r\ntest two\r\nLets all love lain\r\n.\r\n");
+    assert_eq!(response, "+OK message follows\r\nHeader2: value2\r\n\r\ntest two\r\nLets all love lain\r\n.\r\n");
     assert_eq!(response.len(), bytes_read);
 }
 
@@ -431,7 +458,7 @@ fn deleted_messages_are_no_longer_included_in_stat_total() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK 5 74\r\n");
+    assert_eq!(response, "+OK 5 169\r\n");
     assert_eq!(response.len(), bytes_read);
 
     delete_message(&mut session, 2);
@@ -442,7 +469,7 @@ fn deleted_messages_are_no_longer_included_in_stat_total() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK 4 44\r\n");
+    assert_eq!(response, "+OK 4 120\r\n");
     assert_eq!(response.len(), bytes_read);
 }
 
@@ -461,7 +488,7 @@ fn cant_list_deleted_messages() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK 3 12\r\n");
+    assert_eq!(response, "+OK 3 31\r\n");
     assert_eq!(response.len(), bytes_read);
 
     delete_message(&mut session, 3);
@@ -491,7 +518,7 @@ fn deleted_messages_are_no_longer_included_in_list() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK scan listing follows\r\n1 10\r\n2 30\r\n3 12\r\n4 11\r\n5 11\r\n.\r\n");
+    assert_eq!(response, "+OK scan listing follows\r\n1 29\r\n2 49\r\n3 31\r\n4 30\r\n5 30\r\n.\r\n");
     assert_eq!(response.len(), bytes_read);
 
     delete_message(&mut session, 2);
@@ -502,7 +529,7 @@ fn deleted_messages_are_no_longer_included_in_list() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK scan listing follows\r\n1 10\r\n3 12\r\n4 11\r\n5 11\r\n.\r\n");
+    assert_eq!(response, "+OK scan listing follows\r\n1 29\r\n3 31\r\n4 30\r\n5 30\r\n.\r\n");
     assert_eq!(response.len(), bytes_read);
 }
 
@@ -559,7 +586,7 @@ fn can_read_previously_delted_message_after_rset() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK 3 12\r\n");
+    assert_eq!(response, "+OK 3 31\r\n");
     assert_eq!(response.len(), bytes_read);
 
     delete_message(&mut session, 3);
@@ -581,9 +608,8 @@ fn can_read_previously_delted_message_after_rset() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK 3 12\r\n");
+    assert_eq!(response, "+OK 3 31\r\n");
     assert_eq!(response.len(), bytes_read);
-
 }
 
 // Could add more RSET tests
@@ -721,7 +747,7 @@ fn different_users_have_different_maildrops_with_simulatenous_sessions() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session1.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK scan listing follows\r\n1 10\r\n2 30\r\n3 12\r\n4 11\r\n5 11\r\n.\r\n");
+    assert_eq!(response, "+OK scan listing follows\r\n1 29\r\n2 49\r\n3 31\r\n4 30\r\n5 30\r\n.\r\n");
     assert_eq!(response.len(), bytes_read);
 
     let mut session2 = server.new_session();
@@ -736,7 +762,7 @@ fn different_users_have_different_maildrops_with_simulatenous_sessions() {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session2.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(response, "+OK scan listing follows\r\n1 16\r\n2 32\r\n.\r\n");
+    assert_eq!(response, "+OK scan listing follows\r\n1 42\r\n2 52\r\n.\r\n");
     assert_eq!(response.len(), bytes_read);
 }
 
