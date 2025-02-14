@@ -364,6 +364,59 @@ fn can_call_retr_in_transaction_mode() {
 }
 
 #[test]
+fn cant_call_top_in_authentication_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    // Send TOP command
+    let top_command = "TOP 2 1\r\n";
+    session.write(top_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR not authorized\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn can_call_top_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+
+    // Send TOP command
+    let top_command = "TOP 2 1\r\n";
+    session.write(top_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK message follows\r\nHeader2: value2\r\n\r\ntest two\r\n.\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn calling_top_with_too_large_num_lines_gives_whole_message() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+
+    // Send RETR command
+    let top_command = "TOP 2 10\r\n";
+    session.write(top_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK message follows\r\nHeader2: value2\r\n\r\ntest two\r\nLets all love lain\r\n.\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+// DELE Tests
+
+#[test]
 fn cant_call_dele_in_authentication_mode() {
     let server = construct_pop3_server();
     let mut session = server.new_session();

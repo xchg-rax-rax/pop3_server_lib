@@ -119,6 +119,25 @@ impl Message {
         }
         return output.into_bytes();
     }
+
+    pub fn get_message_top_bytes(&self, number_of_lines: usize) -> Vec<u8> {
+        let acutal_number_of_lines: usize = std::cmp::min(
+            number_of_lines,
+            self.body.len(),
+        );
+
+        let mut output = String::new();
+        for header in &self.headers {
+            output += header;
+            output += "\r\n";
+        }
+        output += "\r\n";
+        for i in 0..acutal_number_of_lines {
+            output += self.body.get(i).unwrap(); // TODO: sus
+            output += "\r\n";
+        }
+        return output.into_bytes();
+    }
 }
 
 struct Command {
@@ -399,7 +418,6 @@ impl<'a> POP3ServerSession<'a> {
     }
 
     // TOP
-    /*
     fn top(
         &mut self,
         message_number: usize,
@@ -409,9 +427,28 @@ impl<'a> POP3ServerSession<'a> {
             self.output_buffer.extend(b"-ERR not authorized\r\n");
             return;
         }
-        // TODO: Implement
+        let message: Option<&mut Message> = self.maildrop.get_mut(message_number - 1);
+        match message {
+            Some(message) => {
+                if message.deleted {
+                    self.output_buffer.extend(b"-ERR message has been deleted\r\n");
+                    return
+                }
+                self.output_buffer.extend(b"+OK message follows\r\n");
+                // Send message (should already be formatted and byte stuffed)
+                self.output_buffer.extend(
+                    message.get_message_top_bytes(
+                        number_of_lines,
+                    ),
+                );
+                // Send termination character
+                self.output_buffer.extend(b".\r\n");
+            }
+            None => {
+                self.output_buffer.extend(b"-ERR no such message\r\n");
+            }
+        }
     }
-   */
 
     // --------------------- //
     // Update State Commands //
@@ -481,6 +518,9 @@ impl<'a> POP3ServerSession<'a> {
             },
             "RETR" => {
                 command_parsed_successfully = self.parse_retr_command(&command.arguments);
+            },
+            "TOP" => {
+                command_parsed_successfully = self.parse_top_command(&command.arguments);
             },
             "DELE" => {
                 command_parsed_successfully = self.parse_dele_command(&command.arguments);
@@ -580,6 +620,38 @@ impl<'a> POP3ServerSession<'a> {
             }
         };
         self.retr(message_number);
+        return true;
+    }
+
+    fn parse_top_command(&mut self, arguments: &Vec<String>) -> bool {
+        if arguments.len() != 2 {
+            return false;
+        }
+        let raw_message_number: &String = match arguments.get(0) {
+            Some(raw_message_number) => raw_message_number,
+            None => {
+                return false;
+            }
+        };
+        let message_number: usize = match raw_message_number.parse::<usize>() {
+            Ok(message_number) => message_number,
+            Err(_) => {
+                return false;
+            }
+        };
+        let raw_number_of_lines: &String = match arguments.get(1) {
+            Some(raw_number_of_lines) => raw_number_of_lines,
+            None => {
+                return false;
+            }
+        };
+        let number_of_lines: usize = match raw_number_of_lines.parse::<usize>() {
+            Ok(number_of_lines) => number_of_lines,
+            Err(_) => {
+                return false;
+            }
+        };
+        self.top(message_number, number_of_lines);
         return true;
     }
 
