@@ -1,4 +1,3 @@
-//TODO: For each command add a test to verify it can't be run after quitting 
 //TODO: Implement APOP command
 //TODO: byte stuffing
 //TODO: Make sure byte totals are correct 
@@ -226,9 +225,7 @@ impl<'a> POP3ServerSession<'a> {
         // Obtain lock for user
         self.server.lock_user(&self.username);
 
-        self.maildrop = self.server.retrive_maildrop(
-            &self.username,
-        );
+        self.maildrop = self.server.retrive_maildrop(&self.username);
         
         self.state = POP3ServerSessionStates::Transaction;
         self.output_buffer.extend(b"+OK logged in\r\n");
