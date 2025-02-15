@@ -1,9 +1,12 @@
+//TODO: For each command add a test to verify it can't be run after quitting 
+//TODO: Implement APOP command
 //TODO: byte stuffing
-//TODO: implement remaining optional commands
+//TODO: Make sure byte totals are correct 
+//TODO: General Tidying
 //TODO: General Tidying
 //TODO: Do tagged releases
 //TODO: Add docs
-//TODO: Make sure byte totals are correct 
+use sha2::{Sha256, Digest};
 
 #[derive(PartialEq)]
 enum POP3ServerSessionStates {
@@ -137,6 +140,14 @@ impl Message {
             output += "\r\n";
         }
         return output.into_bytes();
+    }
+
+    pub fn compute_message_hash(&self) -> String {
+        let mut sha256_hasher = Sha256::new();
+        sha256_hasher.update(self.get_message_bytes());
+        let result = sha256_hasher.finalize();
+        let hex_hash = format!("{:x}", result);
+        return hex_hash
     }
 }
 
@@ -275,13 +286,13 @@ impl<'a> POP3ServerSession<'a> {
         return number_of_messages;
     }
 
+    // TODO: This may be incorrect
     fn compute_maildrop_size(maildrop: &Vec<Message>) -> usize {
         let mut total_size: usize = 0;
         for message in maildrop {
             if message.deleted {
                 continue;
             }
-            // TODO: This may be incorrect
             total_size += message.size;
         }
         return total_size;
@@ -315,7 +326,7 @@ impl<'a> POP3ServerSession<'a> {
                     format!(
                         "+OK {} {}\r\n",
                         message_number,
-                        message.size, // will probably need to review this
+                        message.size,
                     ).as_bytes(),
                 );
             }
@@ -334,20 +345,79 @@ impl<'a> POP3ServerSession<'a> {
         self.output_buffer.extend(b"+OK scan listing follows\r\n");
         for (message_number, message) in self.maildrop.iter().enumerate() {
             if message.deleted {
-                // Deleted messages should not be show by the LIST command
                 continue;
             }
             self.output_buffer.extend(
                 format!(
                     "{} {}\r\n",
                     message_number + 1,
-                    message.size, // will probably need to review this
+                    message.size,
                 ).as_bytes(),
             );
         }
-        // Send termination character
         self.output_buffer.extend(b".\r\n");
     }
+
+    // UIDL command
+    fn uidl(&mut self, message_number: Option<usize>) {
+        if self.state != POP3ServerSessionStates::Transaction {
+            self.output_buffer.extend(b"-ERR not authorized\r\n");
+            return;
+        }
+        match message_number {
+            Some(message_number ) => {
+                self.uidl_single_message(message_number);
+            }
+            None => {
+                self.uidl_all_messages();
+            }
+        }
+    }
+
+    fn uidl_single_message(&mut self, message_number: usize) {
+        let message: Option<&Message> = self.maildrop.get(message_number - 1);
+        match message {
+            Some(message) => {
+                if message.deleted {
+                    self.output_buffer.extend(b"-ERR message has been deleted\r\n");
+                    return
+                }
+                self.output_buffer.extend(
+                    format!(
+                        "+OK {} {}\r\n",
+                        message_number,
+                        message.compute_message_hash(), 
+                    ).as_bytes(),
+                );
+            }
+            None => {
+                self.output_buffer.extend(
+                    format!(
+                        "-ERR no such message, only {}\r\n",
+                        self.maildrop.len(),
+                    ).as_bytes(),
+                );
+            }
+        }
+    }
+
+    fn uidl_all_messages(&mut self) {
+        self.output_buffer.extend(b"+OK\r\n");
+        for (message_number, message) in self.maildrop.iter().enumerate() {
+            if message.deleted {
+                continue;
+            }
+            self.output_buffer.extend(
+                format!(
+                    "{} {}\r\n",
+                    message_number + 1,
+                    message.compute_message_hash(),
+                ).as_bytes(),
+            );
+        }
+        self.output_buffer.extend(b".\r\n");
+    }
+
 
     // RETR
     fn retr(&mut self, message_number: usize) {
@@ -516,6 +586,9 @@ impl<'a> POP3ServerSession<'a> {
             "LIST" => {
                 command_parsed_successfully = self.parse_list_command(&command.arguments);
             },
+            "UIDL" => {
+                command_parsed_successfully = self.parse_uidl_command(&command.arguments);
+            },
             "RETR" => {
                 command_parsed_successfully = self.parse_retr_command(&command.arguments);
             },
@@ -603,6 +676,30 @@ impl<'a> POP3ServerSession<'a> {
         }
     }
 
+    fn parse_uidl_command(&mut self, arguments: &Vec<String>) -> bool {
+        if arguments.len() == 0 {
+            self.uidl(None);
+            return true;
+        } else if arguments.len() == 1 {
+            let raw_message_number: &String = match arguments.get(0) {
+                Some(raw_message_number) => raw_message_number,
+                None => {
+                    return false;
+                }
+            };
+            let message_number = match raw_message_number.parse::<usize>() {
+                Ok(message_number) => message_number,
+                Err(_) => {
+                    return false;
+                }
+            };
+            self.uidl(Some(message_number));
+            return true;
+        } else {
+            return false;
+        }
+    }
+    
     fn parse_retr_command(&mut self, arguments: &Vec<String>) -> bool {
         if arguments.len() != 1 {
             return false;
