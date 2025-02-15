@@ -92,6 +92,8 @@ fn server_sends_greeting() {
     read_greeting(&mut session);
 }
 
+// USER and PASS Tests
+
 fn login_with_valid_credentials(session: &mut pop3_server_lib::POP3ServerSession) {
     login_with_credentials(session, "admin", "password");
 }
@@ -204,6 +206,84 @@ fn cant_login_with_invalid_password() {
 }
 
 #[test]
+fn cant_user_after_quitting_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send USER command with argument
+    let user_command = "USER admin\r\n";
+    session.write(user_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_user_after_quitting_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send USER command without arguments
+    let user_command = "USER admin\r\n";
+    session.write(user_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_pass_after_quitting_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send PASS command with argument
+    let pass_command = "PASS password\r\n";
+    session.write(pass_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_pass_after_quitting_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send PASS command without arguments
+    let pass_command = "PASS password\r\n";
+    session.write(pass_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+// STAT Tests
+
+#[test]
 fn can_stat_in_transaction_mode() {
     let server = construct_pop3_server();
     let mut session = server.new_session();
@@ -238,6 +318,45 @@ fn cant_stat_in_authorization_mode() {
     assert_eq!(response.len(), bytes_read);
 }
 
+#[test]
+fn cant_stat_after_quitting_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send STAT command with argument
+    let stat_command = "STAT\r\n";
+    session.write(stat_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_stat_after_quitting_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send STAT command without arguments
+    let stat_command = "STAT\r\n";
+    session.write(stat_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+// LIST Tests
 
 #[test]
 fn cant_list_in_authorization_mode_without_arugments() {
@@ -310,6 +429,235 @@ fn can_list_in_transaction_mode_with_argument() {
 }
 
 #[test]
+fn cant_list_after_quitting_without_arguments_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send LIST command without arguments
+    let list_command = "LIST\r\n";
+    session.write(list_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_list_after_quitting_with_arguments_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send LIST command with argument
+    let list_command = "LIST 1\r\n";
+    session.write(list_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_list_after_quitting_without_arguments_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send LIST command without arguments
+    let list_command = "LIST\r\n";
+    session.write(list_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_list_after_quitting_with_arguments_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send LIST command with argument
+    let list_command = "LIST 1\r\n";
+    session.write(list_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+// UIDL Tests
+
+#[test]
+fn cant_uidl_in_authorization_mode_without_arugments() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+
+    // Send UIDL command without argument
+    let uidl_command = "UIDL\r\n";
+    session.write(uidl_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR not authorized\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_uidl_in_authorization_mode_with_arguments() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+
+    // Send UIDL command with argument
+    let uidl_command = "UIDL 1\r\n";
+    session.write(uidl_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR not authorized\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn can_uidl_in_transaction_mode_without_argument() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+
+    // Send UIDL command with argument
+    let uidl_command = "UIDL\r\n";
+    session.write(uidl_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK\r\n1 7c8901ea0f5c27be856b516674b30b4730ecd9864b5e5641064ea276f57e783c\r\n2 f4edc232ed7209f0537222008bbb5b0dfffdb3e212c2085742bb9486f1cb9297\r\n3 636e1c8e29352530ccc5ea0bc1b84c6058f67723dbba94f2c755346e20be90dd\r\n4 cacccb19f57a40fc2eee5010db0325a38329d1a1f45fb0e7258a64d1e0752521\r\n5 8e44ad6a3dfa06edbbd13aab04068a7d2defa7d5dc28e96c1973d3ee948e83fa\r\n.\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn can_uidl_in_transaction_mode_with_argument() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+
+    // Send UIDL command with argument
+    let uidl_command = "UIDL 1\r\n";
+    session.write(uidl_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(
+        response, 
+        "+OK 1 7c8901ea0f5c27be856b516674b30b4730ecd9864b5e5641064ea276f57e783c\r\n",
+    );
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_uidl_after_quitting_without_arguments_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send UIDL command without arguments
+    let uidl_command = "UIDL\r\n";
+    session.write(uidl_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_uidl_after_quitting_with_arguments_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send UIDL command with argument
+    let uidl_command = "UIDL 1\r\n";
+    session.write(uidl_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_uidl_after_quitting_without_arguments_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send UIDL command without arguments
+    let uidl_command = "UIDL\r\n";
+    session.write(uidl_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_uidl_after_quitting_with_arguments_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send UIDL command with argument
+    let uidl_command = "UIDL 1\r\n";
+    session.write(uidl_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+// NOOP Tests
+
+#[test]
 fn cant_call_noop_in_authentication_mode() {
     let server = construct_pop3_server();
     let mut session = server.new_session();
@@ -328,6 +676,45 @@ fn can_call_noop_in_transaction_mode() {
     verify_transaction_mode(&mut session);
 }
 
+#[test]
+fn cant_call_noop_after_quitting_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send NOOP command
+    let noop_command = "NOOP\r\n";
+    session.write(noop_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_call_noop_after_quitting_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send NOOP command
+    let noop_command = "NOOP\r\n";
+    session.write(noop_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+// RETR Tests
 
 #[test]
 fn cant_call_retr_in_authentication_mode() {
@@ -362,6 +749,46 @@ fn can_call_retr_in_transaction_mode() {
     assert_eq!(response, "+OK message follows\r\nHeader2: value2\r\n\r\ntest two\r\nLets all love lain\r\n.\r\n");
     assert_eq!(response.len(), bytes_read);
 }
+
+#[test]
+fn cant_retr_after_quitting_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send RETR command with argument
+    let retr_command = "RETR 2\r\n";
+    session.write(retr_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_retr_after_quitting_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send RETR command without arguments
+    let retr_command = "RETR 2\r\n";
+    session.write(retr_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+// TOP Tests
 
 #[test]
 fn cant_call_top_in_authentication_mode() {
@@ -414,6 +841,45 @@ fn calling_top_with_too_large_num_lines_gives_whole_message() {
     assert_eq!(response, "+OK message follows\r\nHeader2: value2\r\n\r\ntest two\r\nLets all love lain\r\n.\r\n");
     assert_eq!(response.len(), bytes_read);
 }
+
+#[test]
+fn cant_top_after_quitting_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send TOP command with argument
+    let top_command = "TOP 2 10\r\n";
+    session.write(top_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_top_after_quitting_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send TOP command without arguments
+    let top_command = "TOP 2 10\r\n";
+    session.write(top_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
 // DELE Tests
 
 #[test]
@@ -616,6 +1082,48 @@ fn deleted_messages_are_no_longer_included_in_list() {
     assert_eq!(response.len(), bytes_read);
 }
 
+// TODO: Add test to make sure delted messages aren't show in UIDL listings
+
+#[test]
+fn cant_dele_after_quitting_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send DELE command with argument
+    let dele_command = "DELE 1\r\n";
+    session.write(dele_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_dele_after_quitting_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send DELE command without arguments
+    let dele_command = "DELE 1\r\n";
+    session.write(dele_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+// RSET Tests
+
 #[test]
 fn cant_rset_in_authorization_mode() {
     let server = construct_pop3_server();
@@ -698,6 +1206,44 @@ fn can_read_previously_delted_message_after_rset() {
 
 // TODO: add more RSET tests
 
+#[test]
+fn cant_rset_after_quitting_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send RSET command with argument
+    let rset_command = "RSET\r\n";
+    session.write(rset_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_rset_after_quitting_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send RSET command without arguments
+    let rset_command = "RSET\r\n";
+    session.write(rset_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
 // QUIT tests
 
 fn quit_session(session: &mut pop3_server_lib::POP3ServerSession) {
@@ -731,12 +1277,44 @@ fn can_quit_in_transaction_mode() {
 }
 
 #[test]
-fn all_commands_are_ignored_after_quit() {
-    // I just want to test that after calling quit every command results
-    // in no data being buffered for reading
-    assert!(false);
+fn cant_quit_after_quitting_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send QUIT command with argument
+    let quit_command = "QUIT\r\n";
+    session.write(quit_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
 }
 
+#[test]
+fn cant_quit_after_quitting_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send QUIT command without arguments
+    let quit_command = "QUIT\r\n";
+    session.write(quit_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+// TODO: Add tests that runs multiple commands in a row after quitting
 
 // Multi session tests
 
