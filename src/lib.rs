@@ -23,6 +23,7 @@ pub struct POP3Server {
     locked_users: std::sync::RwLock<std::collections::HashSet<String>>,
     validate_username_callback: fn(&String) -> bool,
     validate_password_callback: fn(&String, &String) -> bool,
+    validate_apop_login_callback: Option<fn(&String, &String, u32, u128) -> bool>,
     retrive_maildrop_callback: fn(&String) -> Vec<Message>,
     delete_message_callback: fn(&String, usize) -> bool,
 }
@@ -32,6 +33,7 @@ impl POP3Server {
         hostname: &String,
         validate_username_callback: fn(&String) -> bool,
         validate_password_callback: fn(&String, &String) -> bool,
+        validate_apop_login_callback: Option<fn(&String, &String, u32, u128) -> bool>,
         retrive_maildrop_callback: fn(&String) -> Vec<Message>,
         delete_message_callback: fn(&String, usize) -> bool,
     ) -> Self {
@@ -40,6 +42,7 @@ impl POP3Server {
             locked_users: std::sync::RwLock::new(std::collections::HashSet::new()),
             validate_username_callback,
             validate_password_callback,
+            validate_apop_login_callback,
             retrive_maildrop_callback,
             delete_message_callback,
         };
@@ -82,6 +85,28 @@ impl POP3Server {
 
     fn validate_password(&self, username: &String, password: &String) -> bool {
         return (self.validate_password_callback)(username, password)
+    }
+
+    fn validate_apop_login(
+        &self,
+        username: &String,
+        digest: &String,
+        pid: u32,
+        session_start_timestamp: u128,
+    ) -> Result<bool, String>{
+        let validate_apop_login_callback = match self.validate_apop_login_callback {
+            Some(validate_apop_login_callback) => validate_apop_login_callback,
+            None => {
+                return Err("No APOP callback configured".to_string());
+            }
+        };
+        let is_login_valid: bool = (validate_apop_login_callback)(
+            username,
+            digest,
+            pid,
+            session_start_timestamp,
+        );
+        return Ok(is_login_valid);
     }
 
     fn delete_message(&self, username: &String, message_number: usize) -> bool {
@@ -169,6 +194,7 @@ struct Command {
 
 pub struct POP3ServerSession<'a> {
     server: &'a POP3Server, // Sever that created the session
+    session_start_timestamp: u128,
     state: POP3ServerSessionStates,
     username: String,
     input_buffer: Vec<u8>,
@@ -178,22 +204,23 @@ pub struct POP3ServerSession<'a> {
 
 impl<'a> POP3ServerSession<'a> {
     fn new(server: &'a POP3Server) -> Result<Self, String> {
+        let utc_time: u128 = match POP3ServerSession::get_utc_time() {
+            Ok(utc_time) => utc_time,
+            Err(e) => {
+                return Err(format!("Failed to get UTC time:\n{:?}", e));
+            }
+        };
         let mut instance: Self = POP3ServerSession{
             server: server,
+            session_start_timestamp: utc_time,
             state: POP3ServerSessionStates::AuthorizationUser,
             username: String::from(""),
             input_buffer: Vec::new(),
             output_buffer: Vec::new(),
             maildrop: Vec::new(),
         };
-        match instance.send_greeting() {
-            Ok(_) => {
-                return Ok(instance);
-            },
-            Err(e) => {
-                return Err(format!("Could not send greeting:\n{:?}", e));
-            }
-        };
+        instance.send_greeting();
+        return Ok(instance);
     }
 
     fn get_utc_time() -> Result<u128, String> {
@@ -210,23 +237,15 @@ impl<'a> POP3ServerSession<'a> {
     }
 
     // Send greeting to client after connection completed
-    fn send_greeting(&mut self) -> Result<(), String> {
-        let utc_time: u128 = match POP3ServerSession::get_utc_time() {
-            Ok(utc_time) => utc_time,
-            Err(e) => {
-                return Err(format!("Failed to get UTC time:\n{:?}", e));
-            }
-        };
+    fn send_greeting(&mut self) {
         let greeting: String = format!(
             "+OK POP3 server ready <{}.{}@{}>\r\n",
             std::process::id(),
-            utc_time,
+            self.session_start_timestamp,
             self.server.hostname,
         );
         self.output_buffer.extend(greeting.as_bytes());
-        return Ok(());
     }
-   
 
     // ---------------------------- //
     // AUTHORIZATION State Commands //
@@ -248,8 +267,10 @@ impl<'a> POP3ServerSession<'a> {
         self.output_buffer.extend(b"+OK user found\r\n");
     }
 
+    // PASS
     fn pass(&mut self, password: &String) {
         if self.state != POP3ServerSessionStates::AuthorizationPass {
+            self.state = POP3ServerSessionStates::AuthorizationUser;
             self.output_buffer.extend(b"-ERR\r\n"); // TODO:  Think of better error
             return;
         }
@@ -274,6 +295,51 @@ impl<'a> POP3ServerSession<'a> {
         
         self.state = POP3ServerSessionStates::Transaction;
         self.output_buffer.extend(b"+OK logged in\r\n");
+    }
+
+    // APOP
+    fn apop(&mut self, username: &String, digest : &String) {
+        if self.state != POP3ServerSessionStates::AuthorizationUser {
+            if self.state == POP3ServerSessionStates::AuthorizationPass {
+                self.state = POP3ServerSessionStates::AuthorizationUser;
+            }
+            self.output_buffer.extend(b"-ERR\r\n"); // TODO: Think of better error
+            return;
+        }
+
+        if self.server.check_user_lock(&self.username) {
+            self.output_buffer.extend(b"-ERR maildrop already locked\r\n");
+            return;
+        }
+
+        let is_login_valid: bool = match self.server.validate_apop_login(
+            username,
+            digest,
+            std::process::id(),
+            self.session_start_timestamp,
+        ) {
+            Ok(result) => result,
+            Err(_) => {
+                self.output_buffer.extend(b"-ERR APOP authentication is not supported\r\n");
+                return;
+            }
+        };
+
+        if !is_login_valid{
+            self.output_buffer.extend(b"-ERR invalid digest\r\n");
+            return;
+        }
+
+        self.username = username.clone();
+
+        // Obtain lock for user
+        self.server.lock_user(&self.username);
+
+        self.maildrop = self.server.retrive_maildrop(&self.username);
+        
+        self.state = POP3ServerSessionStates::Transaction;
+        self.output_buffer.extend(b"+OK logged in\r\n");
+
     }
 
     // Will need this if we ever add raw Message parsing
@@ -622,6 +688,9 @@ impl<'a> POP3ServerSession<'a> {
             "PASS" => {
                 command_parsed_successfully = self.parse_pass_command(&command.arguments);
             },
+            "APOP" => {
+                command_parsed_successfully = self.parse_apop_command(&command.arguments);
+            },
             "STAT" => {
                 command_parsed_successfully = self.parse_stat_command(&command.arguments);
             },
@@ -686,6 +755,25 @@ impl<'a> POP3ServerSession<'a> {
         return true;
     }
 
+    fn parse_apop_command(&mut self, arguments: &Vec<String>) -> bool {
+        if arguments.len() != 2 {
+            return false;
+        }
+        let username: &String = match arguments.get(0) {
+            Some(username) => username,
+            None => {
+                return false;
+            }
+        };
+        let digest: &String = match arguments.get(1) {
+            Some(digest) => digest,
+            None => {
+                return false;
+            }
+        };
+        self.apop(username, digest);
+        return true;
+    }
     fn parse_stat_command(&mut self, arguments: &Vec<String>) -> bool {
         if arguments.len() != 0 {
             return false;
@@ -857,7 +945,7 @@ impl<'a> POP3ServerSession<'a> {
 
         let command: Command = POP3ServerSession::parse_command(raw_command);
         // Remove command from input buffer
-        self.input_buffer.drain(0..raw_command.len()+2); // TODO: fix this
+        self.input_buffer.drain(0..raw_command.len()+2);
         return Some(command);
     }
 

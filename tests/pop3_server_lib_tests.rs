@@ -10,6 +10,8 @@ use std::io::Write;
 // TODO: Read without sending a command first
 // TODO: Add incorrect num args tests
 // TODO: Add incorrect arg types tests
+// TODO: Login after failed USER
+// TODO: Login after failed PASS
 
 
 // Define out dummy server implementation
@@ -81,7 +83,8 @@ fn construct_pop3_server() -> pop3_server_lib::POP3Server {
     return pop3_server_lib::POP3Server::new(
         &"localhost".to_string(),
         |username| dummy_validate_username_callback(username),
-         |username, password| dummy_validate_password_callback(username, password),
+        |username, password| dummy_validate_password_callback(username, password),
+        None,
         |username| dummy_retrive_maildrop_callback(username),
         |username, message_number| dummy_delete_message_callback(username, message_number),
     );
