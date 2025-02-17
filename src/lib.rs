@@ -143,6 +143,7 @@ impl Message {
         }
     }
 
+    // TODO: Unify the next two functions
     pub fn get_message_bytes(&self) -> Vec<u8> {
         let mut output = String::new();
         for header in &self.headers {
@@ -150,8 +151,18 @@ impl Message {
             output += "\r\n";
         }
         output += "\r\n";
-        for line in &self.body {
-            output += line ;
+        for i in 0..self.body.len() {
+            let line = self.body.get(i).unwrap(); // TODO: sus
+            // If first char of line is '.' perform byte stuffing
+            match line.chars().nth(0) {
+                Some(first_char) => {
+                    if first_char == '.' {
+                        output += ".";
+                    }
+                },
+                None => {}
+            }
+            output += line;
             output += "\r\n";
         }
         return output.into_bytes();
@@ -170,7 +181,17 @@ impl Message {
         }
         output += "\r\n";
         for i in 0..acutal_number_of_lines {
-            output += self.body.get(i).unwrap(); // TODO: sus
+            let line = self.body.get(i).unwrap(); // TODO: sus
+            // If first char of line is '.' perform byte stuffing
+            match line.chars().nth(0) {
+                Some(first_char) => {
+                    if first_char == '.' {
+                        output += ".";
+                    }
+                },
+                None => {}
+            }
+            output += line;
             output += "\r\n";
         }
         return output.into_bytes();
