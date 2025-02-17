@@ -2,6 +2,16 @@ use pop3_server_lib;
 use std::io::Read;
 use std::io::Write;
 
+// Tests to add
+// TODO: Add test to run USER command in Transaction mode
+// TODO: Add test to run PASS command in Transaction mode
+// TODO: Send invalid commands in both modes
+// TODO: Send invalid commands after quitting from both modes
+// TODO: Read without sending a command first
+// TODO: Add incorrect num args tests
+// TODO: Add incorrect arg types tests
+
+
 // Define out dummy server implementation
 
 fn dummy_validate_username_callback(username: &String) -> bool {
@@ -69,7 +79,8 @@ fn dummy_delete_message_callback(_username: &String, _message_number: usize) -> 
 
 fn construct_pop3_server() -> pop3_server_lib::POP3Server {
     return pop3_server_lib::POP3Server::new(
-         |username| dummy_validate_username_callback(username),
+        &"localhost".to_string(),
+        |username| dummy_validate_username_callback(username),
          |username, password| dummy_validate_password_callback(username, password),
         |username| dummy_retrive_maildrop_callback(username),
         |username, message_number| dummy_delete_message_callback(username, message_number),
@@ -80,15 +91,19 @@ fn read_greeting(session: &mut pop3_server_lib::POP3ServerSession) {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
-    assert_eq!(bytes_read, 36);
-    assert_eq!(response.len(), 36);
-    assert_eq!(response, "+OK POP3 server reporting for duty\r\n");
+    assert_eq!(response.len(), bytes_read);
+    //assert_eq!(response, "+OK POP3 server reporting for duty\r\n");
+    let pattern = regex::Regex::new(r"^\+OK POP3 server ready <[0-9]+.[0-9]+@localhost>\r\n$").unwrap();
+    if pattern.find(&response).is_none() {
+        assert!(false);
+    }
+
 }
 
 #[test]
 fn server_sends_greeting() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
     read_greeting(&mut session);
 }
 
@@ -135,7 +150,7 @@ fn verify_transaction_mode(session: &mut pop3_server_lib::POP3ServerSession) {
 #[test]
 fn can_login_with_valid_credentials() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -157,7 +172,7 @@ fn verify_not_in_transaction_mode(session: &mut pop3_server_lib::POP3ServerSessi
 #[test]
 fn cant_login_with_invalid_username() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     // Read greeting
     read_greeting(&mut session);
@@ -178,7 +193,7 @@ fn cant_login_with_invalid_username() {
 #[test]
 fn cant_login_with_invalid_password() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     // Read greeting
     read_greeting(&mut session);
@@ -208,7 +223,7 @@ fn cant_login_with_invalid_password() {
 #[test]
 fn cant_user_after_quitting_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -226,7 +241,7 @@ fn cant_user_after_quitting_in_authorization_mode() {
 #[test]
 fn cant_user_after_quitting_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -246,7 +261,7 @@ fn cant_user_after_quitting_in_transaction_mode() {
 #[test]
 fn cant_pass_after_quitting_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -264,7 +279,7 @@ fn cant_pass_after_quitting_in_authorization_mode() {
 #[test]
 fn cant_pass_after_quitting_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -286,7 +301,7 @@ fn cant_pass_after_quitting_in_transaction_mode() {
 #[test]
 fn can_stat_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -304,7 +319,7 @@ fn can_stat_in_transaction_mode() {
 #[test]
 fn cant_stat_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
     
     read_greeting(&mut session);
 
@@ -321,7 +336,7 @@ fn cant_stat_in_authorization_mode() {
 #[test]
 fn cant_stat_after_quitting_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -339,7 +354,7 @@ fn cant_stat_after_quitting_in_authorization_mode() {
 #[test]
 fn cant_stat_after_quitting_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -361,7 +376,7 @@ fn cant_stat_after_quitting_in_transaction_mode() {
 #[test]
 fn cant_list_in_authorization_mode_without_arugments() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
 
@@ -378,7 +393,7 @@ fn cant_list_in_authorization_mode_without_arugments() {
 #[test]
 fn cant_list_in_authorization_mode_with_arguments() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
 
@@ -395,7 +410,7 @@ fn cant_list_in_authorization_mode_with_arguments() {
 #[test]
 fn can_list_in_transaction_mode_without_argument() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -413,7 +428,7 @@ fn can_list_in_transaction_mode_without_argument() {
 #[test]
 fn can_list_in_transaction_mode_with_argument() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -431,7 +446,7 @@ fn can_list_in_transaction_mode_with_argument() {
 #[test]
 fn cant_list_after_quitting_without_arguments_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -449,7 +464,7 @@ fn cant_list_after_quitting_without_arguments_in_authorization_mode() {
 #[test]
 fn cant_list_after_quitting_with_arguments_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -467,7 +482,7 @@ fn cant_list_after_quitting_with_arguments_in_authorization_mode() {
 #[test]
 fn cant_list_after_quitting_without_arguments_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -487,7 +502,7 @@ fn cant_list_after_quitting_without_arguments_in_transaction_mode() {
 #[test]
 fn cant_list_after_quitting_with_arguments_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -509,7 +524,7 @@ fn cant_list_after_quitting_with_arguments_in_transaction_mode() {
 #[test]
 fn cant_uidl_in_authorization_mode_without_arugments() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
 
@@ -526,7 +541,7 @@ fn cant_uidl_in_authorization_mode_without_arugments() {
 #[test]
 fn cant_uidl_in_authorization_mode_with_arguments() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
 
@@ -543,7 +558,7 @@ fn cant_uidl_in_authorization_mode_with_arguments() {
 #[test]
 fn can_uidl_in_transaction_mode_without_argument() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -561,7 +576,7 @@ fn can_uidl_in_transaction_mode_without_argument() {
 #[test]
 fn can_uidl_in_transaction_mode_with_argument() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -582,7 +597,7 @@ fn can_uidl_in_transaction_mode_with_argument() {
 #[test]
 fn cant_uidl_after_quitting_without_arguments_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -600,7 +615,7 @@ fn cant_uidl_after_quitting_without_arguments_in_authorization_mode() {
 #[test]
 fn cant_uidl_after_quitting_with_arguments_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -618,7 +633,7 @@ fn cant_uidl_after_quitting_with_arguments_in_authorization_mode() {
 #[test]
 fn cant_uidl_after_quitting_without_arguments_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -638,7 +653,7 @@ fn cant_uidl_after_quitting_without_arguments_in_transaction_mode() {
 #[test]
 fn cant_uidl_after_quitting_with_arguments_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -660,7 +675,7 @@ fn cant_uidl_after_quitting_with_arguments_in_transaction_mode() {
 #[test]
 fn cant_call_noop_in_authentication_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     verify_not_in_transaction_mode(&mut session);
@@ -669,7 +684,7 @@ fn cant_call_noop_in_authentication_mode() {
 #[test]
 fn can_call_noop_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -679,7 +694,7 @@ fn can_call_noop_in_transaction_mode() {
 #[test]
 fn cant_call_noop_after_quitting_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -697,7 +712,7 @@ fn cant_call_noop_after_quitting_in_authorization_mode() {
 #[test]
 fn cant_call_noop_after_quitting_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -719,7 +734,7 @@ fn cant_call_noop_after_quitting_in_transaction_mode() {
 #[test]
 fn cant_call_retr_in_authentication_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     // Send RETR command
@@ -735,7 +750,7 @@ fn cant_call_retr_in_authentication_mode() {
 #[test]
 fn can_call_retr_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -753,7 +768,7 @@ fn can_call_retr_in_transaction_mode() {
 #[test]
 fn cant_retr_after_quitting_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -771,7 +786,7 @@ fn cant_retr_after_quitting_in_authorization_mode() {
 #[test]
 fn cant_retr_after_quitting_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -793,7 +808,7 @@ fn cant_retr_after_quitting_in_transaction_mode() {
 #[test]
 fn cant_call_top_in_authentication_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     // Send TOP command
@@ -809,7 +824,7 @@ fn cant_call_top_in_authentication_mode() {
 #[test]
 fn can_call_top_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -827,7 +842,7 @@ fn can_call_top_in_transaction_mode() {
 #[test]
 fn calling_top_with_too_large_num_lines_gives_whole_message() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -845,7 +860,7 @@ fn calling_top_with_too_large_num_lines_gives_whole_message() {
 #[test]
 fn cant_top_after_quitting_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -863,7 +878,7 @@ fn cant_top_after_quitting_in_authorization_mode() {
 #[test]
 fn cant_top_after_quitting_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -885,7 +900,7 @@ fn cant_top_after_quitting_in_transaction_mode() {
 #[test]
 fn cant_call_dele_in_authentication_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     // Send DELE command
@@ -915,7 +930,7 @@ fn delete_message(
 #[test]
 fn can_call_dele_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -928,7 +943,7 @@ fn can_call_dele_in_transaction_mode() {
 #[test]
 fn cant_delete_a_deleted_message() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -947,7 +962,7 @@ fn cant_delete_a_deleted_message() {
 #[test]
 fn cant_read_a_deleted_message() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -966,7 +981,7 @@ fn cant_read_a_deleted_message() {
 #[test]
 fn deleted_messages_are_no_longer_included_in_stat_total() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -996,7 +1011,7 @@ fn deleted_messages_are_no_longer_included_in_stat_total() {
 #[test]
 fn cant_list_deleted_messages() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -1026,7 +1041,7 @@ fn cant_list_deleted_messages() {
 #[test]
 fn cant_top_deleted_messages() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -1056,7 +1071,7 @@ fn cant_top_deleted_messages() {
 #[test]
 fn deleted_messages_are_no_longer_included_in_list() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -1087,7 +1102,7 @@ fn deleted_messages_are_no_longer_included_in_list() {
 #[test]
 fn cant_dele_after_quitting_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -1105,7 +1120,7 @@ fn cant_dele_after_quitting_in_authorization_mode() {
 #[test]
 fn cant_dele_after_quitting_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -1127,7 +1142,7 @@ fn cant_dele_after_quitting_in_transaction_mode() {
 #[test]
 fn cant_rset_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
 
@@ -1155,7 +1170,7 @@ fn call_rset(session: &mut pop3_server_lib::POP3ServerSession) {
 #[test]
 fn can_rset_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -1166,7 +1181,7 @@ fn can_rset_in_transaction_mode() {
 #[test]
 fn can_read_previously_delted_message_after_rset() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -1209,7 +1224,7 @@ fn can_read_previously_delted_message_after_rset() {
 #[test]
 fn cant_rset_after_quitting_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -1227,7 +1242,7 @@ fn cant_rset_after_quitting_in_authorization_mode() {
 #[test]
 fn cant_rset_after_quitting_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -1260,7 +1275,7 @@ fn quit_session(session: &mut pop3_server_lib::POP3ServerSession) {
 #[test]
 fn can_quit_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -1269,7 +1284,7 @@ fn can_quit_in_authorization_mode() {
 #[test]
 fn can_quit_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -1279,7 +1294,7 @@ fn can_quit_in_transaction_mode() {
 #[test]
 fn cant_quit_after_quitting_in_authorization_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     quit_session(&mut session);
@@ -1297,7 +1312,7 @@ fn cant_quit_after_quitting_in_authorization_mode() {
 #[test]
 fn cant_quit_after_quitting_in_transaction_mode() {
     let server = construct_pop3_server();
-    let mut session = server.new_session();
+    let mut session = server.new_session().unwrap();
 
     read_greeting(&mut session);
     login_with_valid_credentials(&mut session);
@@ -1321,8 +1336,8 @@ fn cant_quit_after_quitting_in_transaction_mode() {
 #[test]
 fn two_user_can_be_logged_into_two_sessions() {
     let server = construct_pop3_server();
-    let mut session1 = server.new_session();
-    let mut session2 = server.new_session();
+    let mut session1 = server.new_session().unwrap();
+    let mut session2 = server.new_session().unwrap();
     
     read_greeting(&mut session1);
     login_with_credentials(
@@ -1342,8 +1357,8 @@ fn two_user_can_be_logged_into_two_sessions() {
 #[test]
 fn user_cant_log_into_two_sessions() {
     let server = construct_pop3_server();
-    let mut session1 = server.new_session();
-    let mut session2 = server.new_session();
+    let mut session1 = server.new_session().unwrap();
+    let mut session2 = server.new_session().unwrap();
     
     read_greeting(&mut session1);
     login_with_credentials(
@@ -1376,7 +1391,7 @@ fn user_cant_log_into_two_sessions() {
 fn user_can_login_quit_and_login_to_a_new_session() {
     let server = construct_pop3_server();
 
-    let mut session1 = server.new_session();
+    let mut session1 = server.new_session().unwrap();
     read_greeting(&mut session1);
     login_with_credentials(
         &mut session1,
@@ -1385,7 +1400,7 @@ fn user_can_login_quit_and_login_to_a_new_session() {
     );
     quit_session(&mut session1);
 
-    let mut session2 = server.new_session();
+    let mut session2 = server.new_session().unwrap();
     read_greeting(&mut session2);
     login_with_credentials(
         &mut session2,
@@ -1398,7 +1413,7 @@ fn user_can_login_quit_and_login_to_a_new_session() {
 fn different_users_have_different_maildrops_with_simulatenous_sessions() {
     let server = construct_pop3_server();
 
-    let mut session1 = server.new_session();
+    let mut session1 = server.new_session().unwrap();
     read_greeting(&mut session1);
     login_with_credentials(
         &mut session1,
@@ -1413,7 +1428,7 @@ fn different_users_have_different_maildrops_with_simulatenous_sessions() {
     assert_eq!(response, "+OK scan listing follows\r\n1 29\r\n2 49\r\n3 31\r\n4 30\r\n5 30\r\n.\r\n");
     assert_eq!(response.len(), bytes_read);
 
-    let mut session2 = server.new_session();
+    let mut session2 = server.new_session().unwrap();
     read_greeting(&mut session2);
     login_with_credentials(
         &mut session2,

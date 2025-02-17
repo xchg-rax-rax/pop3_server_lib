@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 sha2 = "0.10.8"
+regex = "1.11.1"
 
 [dev-dependencies]
 cargo-tarpaulin = "0.32.0"

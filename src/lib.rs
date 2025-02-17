@@ -1,9 +1,11 @@
 //TODO: Implement APOP command
+//      - Generate hash
+//      - Add APOP command proper
 //TODO: byte stuffing
 //TODO: Make sure byte totals are correct 
 //TODO: General Tidying
 //TODO: General Tidying
-//TODO: Do tagged releases
+//TODO: Tag 0.1.0 release
 //TODO: Add docs
 use sha2::{Sha256, Digest};
 
@@ -17,6 +19,7 @@ enum POP3ServerSessionStates {
 }
 
 pub struct POP3Server {
+    hostname: String,
     locked_users: std::sync::RwLock<std::collections::HashSet<String>>,
     validate_username_callback: fn(&String) -> bool,
     validate_password_callback: fn(&String, &String) -> bool,
@@ -26,12 +29,14 @@ pub struct POP3Server {
 
 impl POP3Server {
     pub fn new(
+        hostname: &String,
         validate_username_callback: fn(&String) -> bool,
         validate_password_callback: fn(&String, &String) -> bool,
         retrive_maildrop_callback: fn(&String) -> Vec<Message>,
         delete_message_callback: fn(&String, usize) -> bool,
     ) -> Self {
         let pop3_server: POP3Server = POP3Server{
+            hostname: hostname.clone(),
             locked_users: std::sync::RwLock::new(std::collections::HashSet::new()),
             validate_username_callback,
             validate_password_callback,
@@ -41,8 +46,15 @@ impl POP3Server {
         return pop3_server
     }
 
-    pub fn new_session (&self) -> POP3ServerSession {
-        return POP3ServerSession::new(self)
+    pub fn new_session (&self) -> Result<POP3ServerSession, String> {
+        match POP3ServerSession::new(self) {
+            Ok(session) => {
+                return Ok(session);
+            },
+            Err(e) => {
+                return Err(format!("Could not create new session\n{:?}", e));
+            }
+        };
     }
 
     pub fn lock_user(&self, username: &String) {
@@ -165,7 +177,7 @@ pub struct POP3ServerSession<'a> {
 }
 
 impl<'a> POP3ServerSession<'a> {
-    fn new(server: &'a POP3Server) -> Self {
+    fn new(server: &'a POP3Server) -> Result<Self, String> {
         let mut instance: Self = POP3ServerSession{
             server: server,
             state: POP3ServerSessionStates::AuthorizationUser,
@@ -174,12 +186,45 @@ impl<'a> POP3ServerSession<'a> {
             output_buffer: Vec::new(),
             maildrop: Vec::new(),
         };
-        instance.send_greeting(); return instance;
+        match instance.send_greeting() {
+            Ok(_) => {
+                return Ok(instance);
+            },
+            Err(e) => {
+                return Err(format!("Could not send greeting:\n{:?}", e));
+            }
+        };
+    }
+
+    fn get_utc_time() -> Result<u128, String> {
+        let now = std::time::SystemTime::now();
+        let duration_since_epoch = match now.duration_since(
+            std::time::UNIX_EPOCH,
+        ) {
+            Ok(duration_since_epoch ) => duration_since_epoch,
+            Err(e) => {
+                return Err(format!("Could not compute duration since epoch:\n{:?}", e));
+            }
+        };
+        return Ok(duration_since_epoch.as_nanos());
     }
 
     // Send greeting to client after connection completed
-    fn send_greeting(&mut self) {
-        self.output_buffer.extend(b"+OK POP3 server reporting for duty\r\n");
+    fn send_greeting(&mut self) -> Result<(), String> {
+        let utc_time: u128 = match POP3ServerSession::get_utc_time() {
+            Ok(utc_time) => utc_time,
+            Err(e) => {
+                return Err(format!("Failed to get UTC time:\n{:?}", e));
+            }
+        };
+        let greeting: String = format!(
+            "+OK POP3 server ready <{}.{}@{}>\r\n",
+            std::process::id(),
+            utc_time,
+            self.server.hostname,
+        );
+        self.output_buffer.extend(greeting.as_bytes());
+        return Ok(());
     }
    
 
@@ -833,9 +878,8 @@ impl<'a> POP3ServerSession<'a> {
         return Command {
             keyword: String::from(keyword),
             arguments 
-        }
+        };
     }
-
 }
 
 impl<'a> std::io::Read for POP3ServerSession<'a> {
