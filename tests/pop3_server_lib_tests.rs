@@ -4,9 +4,6 @@ use std::io::Read;
 use std::io::Write;
 
 // Tests to add
-// TODO: Send invalid commands in both modes
-// TODO: Send invalid commands after quitting from both modes
-// TODO: Read without sending a command first
 // TODO: Add incorrect num args tests
 // TODO: Add incorrect arg types tests
 
@@ -1737,5 +1734,93 @@ fn different_users_have_different_maildrops_with_simulatenous_sessions() {
     assert_eq!(response.len(), bytes_read);
 }
 
+// Invalid command tests
 
+#[test]
+fn invalid_commands_rejected_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
 
+    read_greeting(&mut session);
+
+    // Send invalid command 
+    let quit_command = "KFDJLSKDJ\r\n";
+    session.write(quit_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR Invalid command\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn invalid_commands_rejected_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+
+    // Send invalid command 
+    let quit_command = "K@#$FDJLSKDJ a 123\r\n";
+    session.write(quit_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR Invalid command\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_send_invalid_commands_after_quitting_from_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
+
+    read_greeting(&mut session);
+    quit_session(&mut session);
+
+    // Send invalid command 
+    let quit_command = "KFDJLSKDJ\r\n";
+    session.write(quit_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_send_invalid_commands_after_quitting_from_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+    // Send invalid command 
+    let quit_command = "K@#$FDJLSKDJ a 123\r\n";
+    session.write(quit_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn reading_without_send_command_returns_nothing() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
+
+    read_greeting(&mut session);
+
+    // Send invalid command 
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+}
