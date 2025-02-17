@@ -1,6 +1,3 @@
-//TODO: Implement APOP command
-//      - Generate hash
-//      - Add APOP command proper
 //TODO: byte stuffing
 //TODO: Make sure byte totals are correct 
 //TODO: General Tidying
@@ -87,6 +84,7 @@ impl POP3Server {
         return (self.validate_password_callback)(username, password)
     }
 
+    // We should probably just get the shared secret from the implementation instead
     fn validate_apop_login(
         &self,
         username: &String,
@@ -211,7 +209,7 @@ impl<'a> POP3ServerSession<'a> {
             }
         };
         let mut instance: Self = POP3ServerSession{
-            server: server,
+            server,
             session_start_timestamp: utc_time,
             state: POP3ServerSessionStates::AuthorizationUser,
             username: String::from(""),
@@ -311,7 +309,7 @@ impl<'a> POP3ServerSession<'a> {
             self.output_buffer.extend(b"-ERR maildrop already locked\r\n");
             return;
         }
-
+        
         let is_login_valid: bool = match self.server.validate_apop_login(
             username,
             digest,

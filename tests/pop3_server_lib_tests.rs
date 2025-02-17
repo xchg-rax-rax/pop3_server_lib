@@ -1,8 +1,11 @@
 use pop3_server_lib;
+use regex::Regex;
 use std::io::Read;
 use std::io::Write;
 
 // Tests to add
+// TODO: Login after failed USER
+// TODO: Login after failed PASS
 // TODO: Add test to run USER command in Transaction mode
 // TODO: Add test to run PASS command in Transaction mode
 // TODO: Send invalid commands in both modes
@@ -10,8 +13,6 @@ use std::io::Write;
 // TODO: Read without sending a command first
 // TODO: Add incorrect num args tests
 // TODO: Add incorrect arg types tests
-// TODO: Login after failed USER
-// TODO: Login after failed PASS
 
 
 // Define out dummy server implementation
@@ -23,6 +24,27 @@ fn dummy_validate_username_callback(username: &String) -> bool {
 fn dummy_validate_password_callback(username: &String, password: &String) -> bool {
     return (username == "admin" && password == "password") ||
            (username == "user" && password == "pass");
+}
+
+fn dummy_validate_apop_login_callback(
+    username: &String,
+    digest: &String,
+    pid: u32,
+    session_start_timestamp: u128,
+) -> bool {
+    if username != "apop_user" {
+        return false;
+    }
+    let password: &str = "password";
+    let login_string: String = format!(
+        "<{}.{}@localhost>{}",
+        pid,
+        session_start_timestamp,
+        password,
+    );
+    println!("{}", login_string);
+    let computed_digest = format!("{:x}", md5::compute(login_string.as_bytes()));
+    return computed_digest == *digest;
 }
 
 fn dummy_retrive_maildrop_callback(username: &String) -> Vec<pop3_server_lib::Message> {
@@ -53,7 +75,7 @@ fn dummy_retrive_maildrop_callback(username: &String) -> Vec<pop3_server_lib::Me
             ),
         ]
     }
-    else if username == "user" {
+    else if username == "user" || username == "apop_user" {
         return vec![
             pop3_server_lib::Message::new(
                 &vec!["TestHeader: test_value".to_string()],
@@ -84,13 +106,13 @@ fn construct_pop3_server() -> pop3_server_lib::POP3Server {
         &"localhost".to_string(),
         |username| dummy_validate_username_callback(username),
         |username, password| dummy_validate_password_callback(username, password),
-        None,
+        Some(|username, digest, pid, session_start_timestamp| dummy_validate_apop_login_callback(username, digest, pid, session_start_timestamp)),
         |username| dummy_retrive_maildrop_callback(username),
         |username, message_number| dummy_delete_message_callback(username, message_number),
     );
 }
 
-fn read_greeting(session: &mut pop3_server_lib::POP3ServerSession) {
+fn read_greeting(session: &mut pop3_server_lib::POP3ServerSession) -> String {
     let mut buf: [u8; 512] = [0; 512];
     let bytes_read = session.read(&mut buf).unwrap();
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
@@ -100,7 +122,7 @@ fn read_greeting(session: &mut pop3_server_lib::POP3ServerSession) {
     if pattern.find(&response).is_none() {
         assert!(false);
     }
-
+    return response;
 }
 
 #[test]
@@ -297,6 +319,145 @@ fn cant_pass_after_quitting_in_transaction_mode() {
     let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
     assert_eq!(response, "");
     assert_eq!(response.len(), bytes_read);
+}
+
+// APOP Tests
+
+fn generate_apop_digest(
+    password: &str,
+    greeting: &str,
+) -> String {
+    let regex = Regex::new(r"(<[^>]*>)").unwrap();
+    let caps = regex.captures(greeting).unwrap();
+    let login_string: String = format!(
+        "{}{}",
+        caps.get(1).unwrap().as_str(),
+        password,
+    );
+    println!("{}", login_string);
+    let computed_digest = format!("{:x}", md5::compute(login_string.as_bytes()));
+    return computed_digest;
+}
+
+fn login_with_apop(
+    session: &mut pop3_server_lib::POP3ServerSession, 
+    username: &str,
+    password: &str,
+    greeting: &str
+) {
+
+    let digest = generate_apop_digest(password, greeting);
+
+    // Send APOP command
+    let apop_command = format!("APOP {} {}\r\n", username, digest);
+    session.write(apop_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK logged in\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn can_apop_login_with_valid_credentials() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
+
+    let greeting: String = read_greeting(&mut session);
+    login_with_apop(
+        &mut session, 
+        "apop_user",
+        "password",
+        &greeting,
+    );
+    verify_transaction_mode(&mut session);
+}
+
+
+#[test]
+fn cant_apop_login_with_invalid_username() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
+
+    let greeting = read_greeting(&mut session);
+    let digest = generate_apop_digest("password", &greeting);
+
+    // Send APOP command
+    let apop_command = format!("APOP {} {}\r\n", "admin", digest);
+    session.write(apop_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR invalid digest\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+    // Check we're not in TRANSACTION mode
+    verify_not_in_transaction_mode(&mut session);
+}
+
+#[test]
+fn cant_apop_login_with_invalid_password() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
+
+    let greeting = read_greeting(&mut session);
+    let digest = generate_apop_digest("pass", &greeting);
+
+    // Send APOP command
+    let apop_command = format!("APOP {} {}\r\n", "apop_user", digest);
+    session.write(apop_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR invalid digest\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+    // Check we're not in TRANSACTION mode
+    verify_not_in_transaction_mode(&mut session);
+}
+
+#[test]
+fn cant_apop_after_quitting_in_authorization_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
+
+    let greeting = read_greeting(&mut session);
+    let digest = generate_apop_digest("password", &greeting);
+    quit_session(&mut session);
+
+
+    // Send APOP command
+    let apop_command = format!("APOP {} {}\r\n", "apop_user", digest);
+    session.write(apop_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+
+}
+
+#[test]
+fn cant_apop_after_quitting_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
+
+    let greeting = read_greeting(&mut session);
+    let digest = generate_apop_digest("password", &greeting);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+    quit_session(&mut session);
+
+
+    // Send APOP command
+    let apop_command = format!("APOP {} {}\r\n", "apop_user", digest);
+    session.write(apop_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "");
+    assert_eq!(response.len(), bytes_read);
+
 }
 
 // STAT Tests
