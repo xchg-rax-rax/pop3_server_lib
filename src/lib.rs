@@ -1,6 +1,4 @@
-//TODO: byte stuffing
 //TODO: Make sure byte totals are correct 
-//TODO: General Tidying
 //TODO: General Tidying
 //TODO: Tag 0.1.0 release
 //TODO: Add docs
