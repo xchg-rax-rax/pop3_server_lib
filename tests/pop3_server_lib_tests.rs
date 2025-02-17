@@ -4,10 +4,6 @@ use std::io::Read;
 use std::io::Write;
 
 // Tests to add
-// TODO: Login after failed USER
-// TODO: Login after failed PASS
-// TODO: Add test to run USER command in Transaction mode
-// TODO: Add test to run PASS command in Transaction mode
 // TODO: Send invalid commands in both modes
 // TODO: Send invalid commands after quitting from both modes
 // TODO: Read without sending a command first
@@ -15,7 +11,7 @@ use std::io::Write;
 // TODO: Add incorrect arg types tests
 
 
-// Define out dummy server implementation
+// Define our dummy server implementation
 
 fn dummy_validate_username_callback(username: &String) -> bool {
     return username == "admin" || username == "user";
@@ -197,7 +193,6 @@ fn verify_not_in_transaction_mode(session: &mut pop3_server_lib::POP3ServerSessi
     assert_eq!(response.len(), bytes_read);
 }
 
-
 #[test]
 fn cant_login_with_invalid_username() {
     let server = construct_pop3_server();
@@ -247,6 +242,99 @@ fn cant_login_with_invalid_password() {
 
     // Check we're not in TRANSACTION mode
     verify_not_in_transaction_mode(&mut session);
+}
+
+#[test]
+fn can_login_after_failed_user_command() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
+
+    // Read greeting
+    read_greeting(&mut session);
+
+    // Send USER command with invalid username
+    let user_command = "USER lain\r\n";
+    session.write(user_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR no mailbox exists for specified user\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+    verify_not_in_transaction_mode(&mut session);
+
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+}
+
+#[test]
+fn can_login_after_failed_pass_command() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
+
+    // Read greeting
+    read_greeting(&mut session);
+
+    // Send USER command with valid username
+    let user_command = "USER admin\r\n";
+    session.write(user_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "+OK user found\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+    // Send PASS command with incorrect password
+    let pass_command = "PASS lain\r\n";
+    session.write(pass_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR invalid password\r\n");
+    assert_eq!(response.len(), bytes_read);
+
+    verify_not_in_transaction_mode(&mut session);
+
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+}
+
+#[test]
+fn cant_user_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+
+    // Send USER command without arguments
+    let user_command = "USER admin\r\n";
+    session.write(user_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR\r\n");
+    assert_eq!(response.len(), bytes_read);
+}
+
+#[test]
+fn cant_pass_in_transaction_mode() {
+    let server = construct_pop3_server();
+    let mut session = server.new_session().unwrap();
+
+    read_greeting(&mut session);
+    login_with_valid_credentials(&mut session);
+    verify_transaction_mode(&mut session);
+
+    // Send PASS command without arguments
+    let pass_command = "PASS password\r\n";
+    session.write(pass_command.as_bytes()).unwrap();
+    let mut buf: [u8; 512] = [0; 512];
+    let bytes_read = session.read(&mut buf).unwrap();
+    let response = std::str::from_utf8(&buf).unwrap().trim_matches('\0').to_string();
+    assert_eq!(response, "-ERR\r\n");
+    assert_eq!(response.len(), bytes_read);
 }
 
 #[test]
